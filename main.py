@@ -69,9 +69,11 @@ window.geometry("300x200")
 window.iconbitmap("favicon.ico")
 proxy_state = 0
 chk_autostart = tk.BooleanVar()
-result = subprocess.run(["schtasks", "/Query", "/TN", "simplevpn"], stdout=(subprocess.PIPE), stderr=(subprocess.PIPE))
-if "ERROR: The system cannot find the file specified." not in result.stderr.decode(errors="ignore"):
+result = subprocess.run(["schtasks", "/Query", "/TN", "simplevpn"], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+if result.returncode == 0:
     chk_autostart.set(True)
+else:
+    chk_autostart.set(False)
 window.protocol("WM_DELETE_WINDOW", on_closing)
 btn_general_proxy = tk.Button(window, text="打开加速", command=set_general_proxy)
 btn_close_proxy = tk.Button(window, text="关闭加速", command=close_proxy)
@@ -81,7 +83,6 @@ chk_autostart = tk.BooleanVar()
 chk_autostart_button = tk.Checkbutton(window, text="开机自启动", variable=chk_autostart, command=toggle_autostart)
 chk_autostart_button.pack(pady=20)
 if len(sys.argv) > 1:
-    chk_autostart.set(True)
     try:
         start_state = int(sys.argv[1])
         if start_state == 1:
