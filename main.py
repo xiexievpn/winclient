@@ -206,7 +206,7 @@ def fetch_config_data(uuid):
                                 "network": "tcp",
                                 "security": "reality",
                                 "realitySettings": {
-                                    "show": False,
+                                    "show": false,
                                     "fingerprint": "chrome",
                                     "serverName": f"{domain}.rocketchats.xyz",
                                     "publicKey": "mUzqKeHBc-s1m03iD8Dh1JoL2B9JwG5mMbimEoJ523o",
