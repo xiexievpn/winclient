@@ -111,10 +111,14 @@ import os
 
 def fetch_config_data(uuid):
     try:
+        # 打印传递给服务器的UUID
+        print(f"传递的 UUID: {uuid}")
+
+        # 请求服务器获取配置数据
         response = requests.post("https://vvv.getsteamcard.com/makeurlandget", json={"code": uuid}, headers={"Content-Type": "application/json"})
         response.raise_for_status()
 
-        # 打印详细信息用于调试
+        # 打印响应的状态码和详细信息
         print(f"Response Status Code: {response.status_code}")
         print(f"Response Headers: {response.headers}")
         print(f"Response Text: {response.text}")
@@ -127,113 +131,145 @@ def fetch_config_data(uuid):
 
         # 确认响应文本不为空
         if response.text.strip() == "":
+            print("服务器返回了空内容，请稍后再试")
             messagebox.showerror("Error", "服务器返回了空内容，请稍后再试")
             return
 
+        # 检查响应状态码是否为 200
         if response.status_code == 200:
             # 服务器返回的内容不是 JSON，而是一个字符串，直接解析字符串中的信息
             response_text = response.text.strip()
 
+            # 检查返回内容是否符合预期
             if response_text.startswith("vless://"):
                 # 提取所需信息
                 url_string = response_text
-                uuid = url_string.split("@")[0].split("://")[1]
-                domain = url_string.split("@")[1].split(":")[0].split(".")[0]
-                jsonport_string = url_string.split(":")[2].split("?")[0]
-                jsonport = int(jsonport_string)
-                sni = url_string.split("sni=")[1].split("#")[0].replace("www.", "")
+                print(f"URL String: {url_string}")  # 打印URL字符串
 
-                config_data = {
-                    "log": {
-                        "loglevel": "error"
-                    },
-                    "routing": {
-                        "domainStrategy": "IPIfNonMatch",
-                        "rules": [
+                try:
+                    uuid = url_string.split("@")[0].split("://")[1]
+                    domain = url_string.split("@")[1].split(":")[0].split(".")[0]
+                    jsonport_string = url_string.split(":")[2].split("?")[0]
+                    jsonport = int(jsonport_string)
+                    sni = url_string.split("sni=")[1].split("#")[0].replace("www.", "")
+
+                    # 打印提取的信息
+                    print(f"提取的 UUID: {uuid}")
+                    print(f"提取的 Domain: {domain}")
+                    print(f"提取的 Port: {jsonport}")
+                    print(f"提取的 SNI: {sni}")
+
+                    # 构建 config.json 数据
+                    config_data = {
+                        "log": {
+                            "loglevel": "error"
+                        },
+                        "routing": {
+                            "domainStrategy": "IPIfNonMatch",
+                            "rules": [
+                                {
+                                    "type": "field",
+                                    "domain": ["geosite:category-ads-all"],
+                                    "outboundTag": "block"
+                                },
+                                {
+                                    "type": "field",
+                                    "protocol": ["bittorrent"],
+                                    "outboundTag": "direct"
+                                },
+                                {
+                                    "type": "field",
+                                    "domain": ["geosite:geolocation-!cn"],
+                                    "outboundTag": "proxy"
+                                },
+                                {
+                                    "type": "field",
+                                    "ip": ["geoip:cn", "geoip:private"],
+                                    "outboundTag": "proxy"
+                                }
+                            ]
+                        },
+                        "inbounds": [
                             {
-                                "type": "field",
-                                "domain": ["geosite:category-ads-all"],
-                                "outboundTag": "block"
+                                "listen": "127.0.0.1",
+                                "port": 10808,
+                                "protocol": "socks"
                             },
                             {
-                                "type": "field",
-                                "protocol": ["bittorrent"],
-                                "outboundTag": "direct"
+                                "listen": "127.0.0.1",
+                                "port": 1080,
+                                "protocol": "http"
+                            }
+                        ],
+                        "outbounds": [
+                            {
+                                "protocol": "vless",
+                                "settings": {
+                                    "vnext": [
+                                        {
+                                            "address": f"{domain}.rocketchats.xyz",
+                                            "port": 443,
+                                            "users": [
+                                                {
+                                                    "id": uuid,
+                                                    "encryption": "none",
+                                                    "flow": "xtls-rprx-vision"
+                                                }
+                                            ]
+                                        }
+                                    ]
+                                },
+                                "streamSettings": {
+                                    "network": "tcp",
+                                    "security": "reality",
+                                    "realitySettings": {
+                                        "show": False,
+                                        "fingerprint": "chrome",
+                                        "serverName": f"{domain}.rocketchats.xyz",
+                                        "publicKey": "mUzqKeHBc-s1m03iD8Dh1JoL2B9JwG5mMbimEoJ523o",
+                                        "shortId": "",
+                                        "spiderX": ""
+                                    }
+                                },
+                                "tag": "proxy"
                             },
                             {
-                                "type": "field",
-                                "domain": ["geosite:geolocation-!cn"],
-                                "outboundTag": "proxy"
+                                "protocol": "freedom",
+                                "tag": "direct"
                             },
                             {
-                                "type": "field",
-                                "ip": ["geoip:cn", "geoip:private"],
-                                "outboundTag": "proxy"
+                                "protocol": "blackhole",
+                                "tag": "block"
                             }
                         ]
-                    },
-                    "inbounds": [
-                        {
-                            "listen": "127.0.0.1",
-                            "port": 10808,
-                            "protocol": "socks"
-                        },
-                        {
-                            "listen": "127.0.0.1",
-                            "port": 1080,
-                            "protocol": "http"
-                        }
-                    ],
-                    "outbounds": [
-                        {
-                            "protocol": "vless",
-                            "settings": {
-                                "vnext": [
-                                    {
-                                        "address": f"{domain}.rocketchats.xyz",
-                                        "port": 443,
-                                        "users": [
-                                            {
-                                                "id": uuid,
-                                                "encryption": "none",
-                                                "flow": "xtls-rprx-vision"
-                                            }
-                                        ]
-                                    }
-                                ]
-                            },
-                            "streamSettings": {
-                                "network": "tcp",
-                                "security": "reality",
-                                "realitySettings": {
-                                    "show": false,
-                                    "fingerprint": "chrome",
-                                    "serverName": f"{domain}.rocketchats.xyz",
-                                    "publicKey": "mUzqKeHBc-s1m03iD8Dh1JoL2B9JwG5mMbimEoJ523o",
-                                    "shortId": "",
-                                    "spiderX": ""
-                                }
-                            },
-                            "tag": "proxy"
-                        },
-                        {
-                            "protocol": "freedom",
-                            "tag": "direct"
-                        },
-                        {
-                            "protocol": "blackhole",
-                            "tag": "block"
-                        }
-                    ]
-                }
-                # 将配置写入config.json文件
-                with open("config.json", "w") as config_file:
-                    json.dump(config_data, config_file, indent=4)
+                    }
+
+                    # 获取当前工作目录并打印
+                    current_dir = os.getcwd()
+                    print(f"当前工作目录: {current_dir}")
+
+                    # 将配置写入 config.json 文件
+                    with open("config.json", "w") as config_file:
+                        json.dump(config_data, config_file, indent=4)
+                    print("config.json 文件已成功创建")
+
+                except Exception as e:
+                    # 捕获提取信息时的异常
+                    print(f"提取配置信息时发生错误: {e}")
+                    messagebox.showerror("Error", f"提取配置信息时发生错误: {e}")
+
             else:
+                # 如果响应内容不符合预期格式
+                print("服务器返回的数据不符合预期格式")
                 messagebox.showerror("Error", "服务器返回的数据不符合预期格式")
         else:
+            # 如果响应状态码不是 200
+            print(f"获取配置数据失败，状态码: {response.status_code}")
             messagebox.showerror("Error", f"获取配置数据失败，状态码: {response.status_code}")
+
     except requests.exceptions.RequestException as e:
+        # 捕获网络请求的异常
+        print(f"无法连接到服务器: {e}")
         messagebox.showerror("Error", f"无法连接到服务器: {e}")
 
 def show_main_window(uuid):
