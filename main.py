@@ -88,7 +88,7 @@ def load_uuid():
     return None
 
 def check_login():
-    entered_uuid = entry_uuid.get()
+    entered_uuid = entry_uuid.get().strip()
     try:
         response = requests.post("https://vvv.getsteamcard.com/login", json={"code": entered_uuid})
         if response.status_code == 200:
