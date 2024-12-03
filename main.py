@@ -319,6 +319,10 @@ def show_main_window(uuid):
         except ValueError:
             pass
 
+    window.deiconify()
+    window.attributes('-topmost', True)
+    window.attributes('-topmost', False)     
+
     window.mainloop()
 
 # Login window
