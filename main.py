@@ -204,12 +204,6 @@ def fetch_config_data(uuid):
                         "outbounds": [
                             {
                                 "protocol": "vless",
-                                "mux": { 
-                                           "enabled": true,
-                                           "concurrency": -1, 
-                                           "xudpConcurrency": 16, 
-                                           "xudpProxyUDP443": "reject"
-                                       },
                                 "settings": {
                                     "vnext": [
                                         {
