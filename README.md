@@ -1,4 +1,4 @@
-极简win客户端，所有代码全部开源，可自行用PyInstaller打包，具体打包方法：
+极简简约网络加速器，win客户端，所有代码全部开源，可自行用PyInstaller打包，具体打包方法：
 
 1，安装python 3环境，官网https://www.python.org/downloads/ 直接下载安装，安装务必勾选 "Add Python to PATH"
 
