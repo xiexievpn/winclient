@@ -275,7 +275,7 @@ def fetch_config_data(uuid):
 def show_main_window(uuid):
     global window, btn_general_proxy, btn_close_proxy, chk_autostart
     window = tk.Tk()
-    window.title("简约网络加速器")
+    window.title("谢谢网络加速器")
     window.geometry("300x250")
     window.iconbitmap("favicon.ico")
 
