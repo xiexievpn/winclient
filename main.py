@@ -90,7 +90,7 @@ def load_uuid():
 def check_login():
     entered_uuid = entry_uuid.get().strip()
     try:
-        response = requests.post("https://vvv.getsteamcard.com/login", json={"code": entered_uuid})
+        response = requests.post("https://vvv.xiexievpn.com/login", json={"code": entered_uuid})
         if response.status_code == 200:
             # 登录成功，保存UUID并关闭登录窗口显示主窗口
             if chk_remember.get():
@@ -115,7 +115,7 @@ def fetch_config_data(uuid):
         print(f"传递的 UUID: {uuid}")
 
         # 请求服务器获取配置数据
-        response = requests.post("https://vvv.getsteamcard.com/makeurlandget", json={"code": uuid}, headers={"Content-Type": "application/json"})
+        response = requests.post("https://vvv.xiexievpn.com/makeurlandget", json={"code": uuid}, headers={"Content-Type": "application/json"})
         response.raise_for_status()
 
         # 打印响应的状态码和详细信息
