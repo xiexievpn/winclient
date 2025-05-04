@@ -84,12 +84,12 @@ def on_closing():
     window.destroy()
 
 def save_uuid(uuid):
-    with open("uuid.txt", "w") as file:
+    with open(resource_path("uuid.txt"), "w") as file:
         file.write(uuid)
 
 def load_uuid():
-    if os.path.exists("uuid.txt"):
-        with open("uuid.txt", "r") as file:
+    if os.path.exists(resource_path("uuid.txt")):
+        with open(resource_path("uuid.txt"), "r") as file:
             return file.read().strip()
     return None
 
