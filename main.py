@@ -4,6 +4,7 @@ import subprocess, os, sys, ctypes
 import requests
 import json
 import webbrowser
+import platform
 
 def resource_path(relative_path):
     if hasattr(sys, '_MEIPASS'):
@@ -22,6 +23,30 @@ if not is_admin():
     ctypes.windll.shell32.ShellExecuteW(None, "runas", sys.executable, " ".join(sys.argv), None, 1)
     sys.exit(0)
 
+def get_persistent_path(filename):
+    if platform.system() == "Windows":
+        appdata = os.getenv('APPDATA')
+        your_app_folder = os.path.join(appdata, "XieXieVPN")
+        os.makedirs(your_app_folder, exist_ok=True)
+        return os.path.join(your_app_folder, filename)
+    else:
+        home = os.path.expanduser("~")
+        your_app_folder = os.path.join(home, ".XieXieVPN")
+        os.makedirs(your_app_folder, exist_ok=True)
+        return os.path.join(your_app_folder, filename)
+
+AUTOSTART_FILE = get_persistent_path("autostart_state.txt")
+
+def save_autostart_state(state: bool):
+    with open(AUTOSTART_FILE, "w", encoding="utf-8") as f:
+        f.write("1" if state else "0")
+
+def load_autostart_state() -> bool:
+    if os.path.exists(AUTOSTART_FILE):
+        with open(AUTOSTART_FILE, "r", encoding="utf-8") as f:
+            return f.read().strip() == "1"
+    return False
+
 def get_exe_dir():
     if getattr(sys, "frozen", False):
         return os.path.dirname(sys.executable)
@@ -35,7 +60,23 @@ proxy_state = 0
 def toggle_autostart():
     global proxy_state
     try:
-        result = subprocess.run(["cmd", "/c", resource_path("createplan.bat"), str(proxy_state)], capture_output=True, text=True, check=True)
+        save_autostart_state(chk_autostart.get())
+        exe_path = sys.executable
+        arg1 = "1"
+        tr_value = f"\"{exe_path}\" {arg1}"
+        cmd = [
+                "schtasks",
+                "/Create",
+                "/SC", "ONLOGON",
+                "/TN", "simplevpn",
+                "/TR", tr_value,
+                "/RL", "HIGHEST",
+                "/F",
+        ]
+        try:
+             result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+        except subprocess.CalledProcessError as e:
+               print(e.stderr)
         if chk_autostart.get():
             subprocess.run(['schtasks', '/Change', '/TN', 'simplevpn', '/ENABLE'], capture_output=True, text=True, check=True)
         else:
@@ -84,34 +125,45 @@ def on_closing():
     window.destroy()
 
 def save_uuid(uuid):
-    with open(resource_path("uuid.txt"), "w") as file:
-        file.write(uuid)
+    with open(get_persistent_path("uuid.txt"), "w", encoding="utf-8") as f:
+        f.write(uuid)
 
 def load_uuid():
-    if os.path.exists(resource_path("uuid.txt")):
-        with open(resource_path("uuid.txt"), "r") as file:
-            return file.read().strip()
+    path_ = get_persistent_path("uuid.txt")
+    if os.path.exists(path_):
+        with open(path_, "r", encoding="utf-8") as f:
+            return f.read().strip()
     return None
+
+def remove_uuid_file():
+    path_ = get_persistent_path("uuid.txt")
+    if os.path.exists(path_):
+        os.remove(path_)
 
 def check_login():
     entered_uuid = entry_uuid.get().strip()
     try:
         response = requests.post("https://vvv.xiexievpn.com/login", json={"code": entered_uuid})
         if response.status_code == 200:
-            # 登录成功，保存UUID并关闭登录窗口显示主窗口
             if chk_remember.get():
                 save_uuid(entered_uuid)
             login_window.destroy()
-            # 将用户输入的 UUID 传递给主窗口函数
             show_main_window(entered_uuid)
-        elif response.status_code == 401:
-            messagebox.showerror("Error", "无效的随机码")
-        elif response.status_code == 403:
-            messagebox.showerror("Error", "访问已过期")
         else:
-            messagebox.showerror("Error", "服务器错误")
+            remove_uuid_file()
+            if response.status_code == 401:
+                messagebox.showerror("Error", "无效的随机码")
+            elif response.status_code == 403:
+                messagebox.showerror("Error", "访问已过期")
+            else:
+                messagebox.showerror("Error", "服务器错误")
     except requests.exceptions.RequestException as e:
+        remove_uuid_file()
         messagebox.showerror("Error", f"无法连接到服务器: {e}")
+
+def on_remember_changed(*args):
+    if not chk_remember.get():
+        remove_uuid_file()
 
 def do_adduser(uuid):
     try:
@@ -290,15 +342,8 @@ def show_main_window(uuid):
     btn_close_proxy.pack(pady=10)
 
     chk_autostart = tk.BooleanVar()
+    chk_autostart.set(load_autostart_state())
     chk_autostart.trace_add("write", on_chk_change)
-    try:
-        result = subprocess.run(["schtasks", "/Query", "/TN", "simplevpn"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=True)
-        if "Enabled" in result.stdout:
-            chk_autostart.set(True)
-        else:
-            chk_autostart.set(False)
-    except subprocess.CalledProcessError:
-        chk_autostart.set(False)
 
     chk_autostart_button = tk.Checkbutton(window, text="开机自启动", variable=chk_autostart, command=toggle_autostart)
     chk_autostart_button.pack(pady=10)
@@ -356,6 +401,8 @@ entry_uuid.bind("<Button-3>", show_context_menu)  # 绑定右键菜单
 chk_remember = tk.BooleanVar()
 chk_remember_button = tk.Checkbutton(login_window, text="下次自动登录", variable=chk_remember)
 chk_remember_button.pack(pady=5)
+
+chk_remember.trace_add("write", on_remember_changed)
 
 btn_login = tk.Button(login_window, text="登录", command=check_login)
 btn_login.pack(pady=10)
