@@ -5,6 +5,13 @@ import requests
 import json
 import webbrowser
 
+def resource_path(relative_path):
+    if hasattr(sys, '_MEIPASS'):
+        base_path = sys._MEIPASS
+    else:
+        base_path = os.path.dirname(os.path.abspath(__file__))
+    return os.path.join(base_path, relative_path)
+
 def is_admin():
     try:
         return ctypes.windll.shell32.IsUserAnAdmin()
@@ -22,14 +29,13 @@ def get_exe_dir():
         return os.path.dirname(os.path.abspath(__file__))
 
 exe_dir = get_exe_dir()
-os.chdir(exe_dir)
 
 proxy_state = 0
 
 def toggle_autostart():
     global proxy_state
     try:
-        result = subprocess.run(["cmd", "/c", "createplan.bat", str(proxy_state)], capture_output=True, text=True, check=True)
+        result = subprocess.run(["cmd", "/c", resource_path("createplan.bat"), str(proxy_state)], capture_output=True, text=True, check=True)
         if chk_autostart.get():
             subprocess.run(['schtasks', '/Change', '/TN', 'simplevpn', '/ENABLE'], capture_output=True, text=True, check=True)
         else:
@@ -43,8 +49,8 @@ def on_chk_change(*args):
 def set_general_proxy():
     global proxy_state
     try:
-        subprocess.run(["cmd", "/c", "close.bat"], capture_output=True, text=True, check=True)
-        subprocess.run(["cmd", "/c", "internet.bat"], capture_output=True, text=True, check=True)
+        subprocess.run(["cmd", "/c", resource_path("close.bat")], capture_output=True, text=True, check=True)
+        subprocess.run(["cmd", "/c", resource_path("internet.bat")], capture_output=True, text=True, check=True)
         messagebox.showinfo("Information", "加速设置成功")
         btn_general_proxy.config(state="disabled")
         btn_close_proxy.config(state="normal")
@@ -56,7 +62,7 @@ def set_general_proxy():
 def close_proxy():
     global proxy_state
     try:
-        subprocess.run(["cmd", "/c", "close.bat"], capture_output=True, text=True, check=True)
+        subprocess.run(["cmd", "/c", resource_path("close.bat")], capture_output=True, text=True, check=True)
         messagebox.showinfo("Information", "加速已关闭")
         btn_close_proxy.config(state="disabled")
         btn_general_proxy.config(state="normal")
@@ -71,7 +77,7 @@ def on_closing():
     if close_state == "normal":
         if general_state == "disabled":
             try:
-                subprocess.run(["cmd", "/c", "close.bat"], capture_output=True, text=True, check=True)
+                subprocess.run(["cmd", "/c", resource_path("close.bat")], capture_output=True, text=True, check=True)
                 messagebox.showinfo("Information", "加速已暂时关闭")
             except subprocess.CalledProcessError as e:
                 messagebox.showerror("Error", f"Failed to close proxy on exit: {e.stderr}")
@@ -235,9 +241,8 @@ def parse_and_write_config(url_string):
             ]
         }
 
-        with open("config.json", "w", encoding="utf-8") as config_file:
+        with open(resource_path("config.json"), "w", encoding="utf-8") as config_file:
             json.dump(config_data, config_file, indent=4)
-        print("config.json 文件已成功创建")
 
     except Exception as e:
         print(f"提取配置信息时发生错误: {e}")
@@ -275,7 +280,7 @@ def show_main_window(uuid):
     window = tk.Tk()
     window.title("谢谢网络加速器")
     window.geometry("300x250")
-    window.iconbitmap("favicon.ico")
+    window.iconbitmap(resource_path("favicon.ico"))
 
     window.protocol("WM_DELETE_WINDOW", on_closing)
 
@@ -327,7 +332,7 @@ def show_main_window(uuid):
 login_window = tk.Tk()
 login_window.title("登录")
 login_window.geometry("300x200")
-login_window.iconbitmap("favicon.ico")
+login_window.iconbitmap(resource_path("favicon.ico"))
 
 label_uuid = tk.Label(login_window, text="请输入随机码:")
 label_uuid.pack(pady=10)
