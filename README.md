@@ -1,4 +1,4 @@
-cn.xiexievpn.com
+谢谢网络加速器 – https://cn.xiexievpn.com
 
 
 谢谢网络加速器，win客户端，所有代码全部开源，可自行用PyInstaller打包，具体打包方法：
