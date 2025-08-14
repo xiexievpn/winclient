@@ -5,6 +5,7 @@ import requests
 import json
 import webbrowser
 import platform
+import urllib.parse
 
 def resource_path(relative_path):
     if hasattr(sys, '_MEIPASS'):
@@ -203,46 +204,66 @@ def parse_and_write_config(url_string):
             messagebox.showerror("Error", "服务器返回的数据不符合预期格式（不是 vless:// 开头）")
             return
 
+        # 解析基本信息
         uuid = url_string.split("@")[0].split("://")[1]
-        domain = url_string.split("@")[1].split(":")[0].split(".")[0]
-        jsonport_string = url_string.split(":")[2].split("?")[0]
+        
+        # 解析域名和端口
+        main_part = url_string.split("@")[1]
+        domain_port_part = main_part.split("?")[0]
+        domain = domain_port_part.split(":")[0].split(".")[0]
+        jsonport_string = domain_port_part.split(":")[1]
         jsonport = int(jsonport_string)
-        sni = url_string.split("sni=")[1].split("#")[0].replace("www.", "")
+        
+        # 解析查询参数
+        query_part = url_string.split("?")[1].split("#")[0]
+        params = urllib.parse.parse_qs(query_part)
+        
+        # 提取新的参数
+        public_key = params.get('pbk', [''])[0] 
+        short_id = params.get('sid', [''])[0]
+        sni = params.get('sni', [f"{domain}.rocketchats.xyz"])[0].replace("www.", "")
+        
+        # 如果没有从参数中获取到，使用默认值
+        if not public_key:
+            public_key = "mUzqKeHBc-s1m03iD8Dh1JoL2B9JwG5mMbimEoJ523o"
 
+        if not short_id:
+            short_id = ""
+        
         config_data = {
             "log": {
                 "loglevel": "error"
             },
-                "dns": {
-        "servers": [
-            {
-                "tag": "bootstrap", 
-                "address": "223.5.5.5", 
-                "domains": [ ], 
-                "expectIPs": [
-                    "geoip:cn"
+            "dns": {
+                "servers": [
+                    {
+                        "tag": "bootstrap", 
+                        "address": "223.5.5.5", 
+                        "domains": [], 
+                        "expectIPs": [
+                            "geoip:cn"
+                        ], 
+                        "detour": "direct"
+                    }, 
+                    {
+                        "tag": "remote-doh", 
+                        "address": "https://dns.google/dns-query", 
+                        "detour": "proxy"
+                    }, 
+                    "localhost"
                 ], 
-                "detour": "direct"
-            }, 
-            {
-                "tag": "remote-doh", 
-                "address": "https://dns.google/dns-query ", 
-                "detour": "proxy"
-            }, 
-            "localhost"
-        ], 
-        "queryStrategy": "UseIPv4"
-    },
+                "queryStrategy": "UseIPv4"
+            },
             "routing": {
                 "domainStrategy": "IPIfNonMatch",
                 "rules": [
                     {
-                "type": "field", 
-                "inboundTag": [
-                    "dns-in"
-                ], 
-                "outboundTag": "proxy"
-            }, 
+                        "type": "field", 
+                        "inboundTag": [
+                            "dns-in"
+                        ], 
+                        "outboundTag": "proxy"
+                    }, 
                     {
                         "type": "field",
                         "domain": ["geosite:category-ads-all"],
@@ -267,16 +288,16 @@ def parse_and_write_config(url_string):
             },
             "inbounds": [
                 {
-            "tag": "dns-in", 
-            "listen": "127.0.0.1", 
-            "port": 53, 
-            "protocol": "dokodemo-door", 
-            "settings": {
-                "address": "8.8.8.8", 
-                "port": 53, 
-                "network": "tcp,udp"
-            }
-        },
+                    "tag": "dns-in", 
+                    "listen": "127.0.0.1", 
+                    "port": 53, 
+                    "protocol": "dokodemo-door", 
+                    "settings": {
+                        "address": "8.8.8.8", 
+                        "port": 53, 
+                        "network": "tcp,udp"
+                    }
+                },
                 {
                     "listen": "127.0.0.1",
                     "port": 10808,
@@ -312,9 +333,9 @@ def parse_and_write_config(url_string):
                         "realitySettings": {
                             "show": False,
                             "fingerprint": "chrome",
-                            "serverName": f"{domain}.rocketchats.xyz",
-                            "publicKey": "mUzqKeHBc-s1m03iD8Dh1JoL2B9JwG5mMbimEoJ523o",
-                            "shortId": "",
+                            "serverName": sni,
+                            "publicKey": public_key,
+                            "shortId": short_id,
                             "spiderX": ""
                         }
                     },
@@ -333,6 +354,8 @@ def parse_and_write_config(url_string):
 
         with open(resource_path("config.json"), "w", encoding="utf-8") as config_file:
             json.dump(config_data, config_file, indent=4)
+            
+        print(f"配置已写入")
 
     except Exception as e:
         print(f"提取配置信息时发生错误: {e}")
@@ -349,6 +372,10 @@ def fetch_config_data(uuid):
         response_data = response.json()
         v2rayurl = response_data.get("v2rayurl", "")
         zone = response_data.get("zone", "")
+        
+        # 可选：获取其他新字段
+        public_key = response_data.get("publicKey", "")
+        short_id = response_data.get("shortId", "")
 
         if not v2rayurl and not zone:
             print("v2rayurl 和 zone 都为空，先调用 /adduser...")
@@ -360,6 +387,9 @@ def fetch_config_data(uuid):
 
         else:
             parse_and_write_config(v2rayurl)
+            # 如果需要，可以单独处理 public_key 和 short_id
+            if public_key and short_id:
+                print(f"用户配置已更新")
 
     except requests.exceptions.RequestException as e:
         print(f"无法连接到服务器: {e}")
@@ -452,4 +482,5 @@ if saved_uuid:
     check_login()
 
 login_window.mainloop()
+
 
