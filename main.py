@@ -15,10 +15,8 @@ import time
 import tempfile
 import shutil
 
-# 版本常量
-CURRENT_VERSION = "1.0.0"
+CURRENT_VERSION = "1.0.2"
 
-# 尝试导入PIL，如果失败则使用备用方案
 try:
     from PIL import Image, ImageTk
     PIL_AVAILABLE = True
@@ -86,14 +84,12 @@ if not is_admin():
 
 load_language()
 
-# 版本比较函数
 def compare_versions(version1, version2):
     """比较两个版本号，返回 -1（v1<v2）、0（v1=v2）或 1（v1>v2）"""
     try:
         v1_parts = [int(x) for x in version1.split('.')]
         v2_parts = [int(x) for x in version2.split('.')]
 
-        # 补齐长度
         max_len = max(len(v1_parts), len(v2_parts))
         v1_parts.extend([0] * (max_len - len(v1_parts)))
         v2_parts.extend([0] * (max_len - len(v2_parts)))
@@ -131,7 +127,7 @@ def check_for_updates():
             min_version = update_info.get("minVersion", "0.0.0")
 
             if compare_versions(CURRENT_VERSION, latest_version) < 0:
-                # 判断是否强制更新
+                
                 if compare_versions(CURRENT_VERSION, min_version) < 0:
                     update_info["updateType"] = "force"
                 return update_info
@@ -142,11 +138,10 @@ def check_for_updates():
 def download_and_replace():
     """下载新版本并替换当前 exe"""
     try:
-        # 1. 下载新版本到临时文件
+        
         temp_dir = tempfile.gettempdir()
         temp_path = os.path.join(temp_dir, 'xiexievpn_new.exe')
 
-        # 显示下载中的消息
         download_window = tk.Toplevel()
         download_window.title(get_text("app_title"))
         download_window.geometry("300x100")
@@ -169,24 +164,22 @@ def download_and_replace():
 
         download_window.destroy()
 
-        # 2. 创建批处理脚本来替换文件
         current_exe = sys.executable
         update_script = os.path.join(temp_dir, 'update_xiexievpn.bat')
 
-        # 批处理脚本内容：
         script_content = f'''@echo off
 echo Updating XieXieVPN...
 ping 127.0.0.1 -n 3 > nul
 del /f /q "{current_exe}" 2>nul
 move /y "{temp_path}" "{current_exe}" >nul
-start "" "{current_exe}"
+cd /d "{os.path.dirname(current_exe)}"
+start "" /d "{os.path.dirname(current_exe)}" "{current_exe}"
 del "%~f0"
 '''
 
         with open(update_script, 'w', encoding='gbk') as f:
             f.write(script_content)
 
-        # 3. 启动批处理脚本并退出当前程序
         subprocess.Popen(update_script, shell=True, creationflags=subprocess.CREATE_NO_WINDOW)
         sys.exit(0)
 
@@ -201,14 +194,14 @@ def show_update_dialog(update_info):
     notes = update_info.get("releaseNotes", "")
 
     if update_type == "force":
-        # 强制更新 - 没有取消按钮
+        
         messagebox.showinfo(
             get_message("update_required"),
             f"{get_message('force_update_msg')}\n\n{get_message('version_label')}: {version}\n\n{notes}"
         )
         download_and_replace()
     else:
-        # 可选更新
+        
         result = messagebox.askyesno(
             get_message("update_available"),
             f"{get_message('optional_update_msg')}\n\n{get_message('version_label')}: {version}\n\n{notes}"
@@ -216,11 +209,10 @@ def show_update_dialog(update_info):
         if result:
             download_and_replace()
 
-# 全局状态变量
-config_ready = False        # 标记config.json是否已创建
-pending_autostart = False   # 标记是否需要自动启动
-current_region = None       # 当前区域
-current_uuid = None         # 当前用户UUID
+config_ready = False        
+pending_autostart = False   
+current_region = None       
+current_uuid = None         
 
 mutex_name = "XieXieVPN_SingleInstance_Mutex"
 try:
@@ -267,7 +259,6 @@ exe_dir = get_exe_dir()
 
 proxy_state = 0
 
-# 区域映射配置
 REGION_TO_FLAG = {
     "us-west-2": "us",
     "ap-northeast-2": "jp", 
@@ -285,7 +276,6 @@ REGION_TO_FLAG = {
 
 FLAG_TO_REGION = {v: k for k, v in REGION_TO_FLAG.items()}
 
-# 区域配置：(flag_code, region_aws_code)
 REGIONS = [
     ("jp", "ap-northeast-2"),
     ("us", "us-west-2"), 
@@ -309,27 +299,23 @@ class RegionSelector(tk.Toplevel):
         self.uuid = uuid
         self.selected_flag = None
         self.switching = False
-        self.max_progress = 0  # 跟踪最大进度值，确保进度只增不减
+        self.max_progress = 0  
         
         self.title(get_message("select_region"))
         self.geometry("480x360")
         self.iconbitmap(resource_path("favicon.ico"))
         self.resizable(False, False)
-        
-        # 使窗口居中
+
         self.transient(parent)
         self.grab_set()
-        
-        # 创建主框架
+
         main_frame = tk.Frame(self)
         main_frame.pack(fill=tk.BOTH, expand=True, padx=20, pady=20)
-        
-        # 标题
+
         self.title_label = tk.Label(main_frame, text=get_message("select_region"), 
                               font=("Arial", 14, "bold"))
         self.title_label.pack(pady=(0, 15))
-        
-        # 当前区域显示（始终显示）
+
         self.current_label = tk.Label(main_frame, font=("Arial", 10), fg="blue")
         self.current_label.pack(pady=(0, 10))
         
@@ -338,84 +324,72 @@ class RegionSelector(tk.Toplevel):
         else:
             current_text = f"{get_message('current_region')}: {get_message('region_loading')}"
         self.current_label.config(text=current_text)
-        
-        # 创建国旗网格
+
         self.create_flag_grid(main_frame)
-        
-        # 进度将通过窗口标题显示，不需要UI组件
-        
-        # 关闭按钮
+
         close_btn = tk.Button(main_frame, text=get_message("close_button") if get_message("close_button") else "Close", 
                              command=self.close_window)
         close_btn.pack(pady=10)
     
     def force_ui_refresh(self):
         """强制刷新UI，确保进度条等元素立即显示"""
-        self.update_idletasks()  # 处理待定的几何管理
-        self.update()  # 处理所有待定事件
-        # Windows特定：使用after延迟确保渲染
+        self.update_idletasks()  
+        self.update()  
+        
         if sys.platform == 'win32':
             self.after(1, lambda: self.update())
     
     def create_flag_grid(self, parent):
-        # 创建滚动框架
+        
         flag_frame = tk.Frame(parent)
         flag_frame.pack(fill=tk.BOTH, expand=True)
-        
-        # 4列3行布局
+
         self.flag_buttons = {}
         for idx, (flag_code, aws_region) in enumerate(REGIONS):
             row = idx // 4
             col = idx % 4
-            
-            # 创建按钮框架
+
             btn_frame = tk.Frame(flag_frame, relief=tk.SOLID, bd=1)
             btn_frame.grid(row=row, column=col, padx=8, pady=8, sticky="nsew")
-            
-            # 配置网格权重
+
             flag_frame.grid_rowconfigure(row, weight=1)
             flag_frame.grid_columnconfigure(col, weight=1)
             
             try:
-                # 加载国旗图片
+                
                 flag_path = resource_path(f"flags/{flag_code}.png")
                 if PIL_AVAILABLE and os.path.exists(flag_path):
-                    # 加载并调整图片大小
+                    
                     pil_image = Image.open(flag_path)
                     pil_image = pil_image.resize((40, 30), Image.Resampling.LANCZOS)
                     flag_image = ImageTk.PhotoImage(pil_image)
-                    
-                    # 创建图片标签
+
                     flag_label = tk.Label(btn_frame, image=flag_image, cursor="hand2")
-                    flag_label.image = flag_image  # 保持引用
+                    flag_label.image = flag_image  
                     flag_label.pack(pady=2)
                 else:
-                    # 如果PIL不可用或图片不存在，显示文字
+                    
                     flag_label = tk.Label(btn_frame, text=flag_code.upper(), 
                                         font=("Arial", 12, "bold"), cursor="hand2")
                     flag_label.pack(pady=2)
-                
-                # 区域名称
+
                 region_name = get_message(f"region_{flag_code}")
                 name_label = tk.Label(btn_frame, text=region_name, 
                                     font=("Arial", 8), cursor="hand2")
                 name_label.pack()
-                
-                # 绑定点击事件
+
                 flag_label.bind("<Button-1>", lambda e, f=flag_code: self.on_flag_click(f))
                 name_label.bind("<Button-1>", lambda e, f=flag_code: self.on_flag_click(f))
                 btn_frame.bind("<Button-1>", lambda e, f=flag_code: self.on_flag_click(f))
-                
-                # 保存按钮引用
+
                 self.flag_buttons[flag_code] = btn_frame
-                
-                # 高亮当前区域
+
                 if flag_code == self.current_zone:
                     self.highlight_flag(flag_code)
                     
             except Exception as e:
                 print(f"Error loading flag {flag_code}: {e}")
-                # 创建文字按钮作为备用
+                
                 text_label = tk.Label(btn_frame, text=flag_code.upper(), 
                                     font=("Arial", 10, "bold"), cursor="hand2")
                 text_label.pack()
@@ -426,7 +400,7 @@ class RegionSelector(tk.Toplevel):
                     self.highlight_flag(flag_code)
     
     def highlight_flag(self, flag_code):
-        # 移除之前的高亮
+        
         for code, btn in self.flag_buttons.items():
             if code == flag_code:
                 btn.config(relief=tk.RIDGE, bd=3, bg="#e8f5e9")
@@ -439,26 +413,22 @@ class RegionSelector(tk.Toplevel):
             
         self.selected_flag = flag_code
         self.highlight_flag(flag_code)
-        
-        # 开始切换区域
+
         self.switch_region(flag_code)
     
     def switch_region(self, flag_code):
         global proxy_state
         self.switching = True
-        
-        # 检查当前VPN连接状态
+
         self.was_vpn_on = (proxy_state == 1)
-        
-        # 如果VPN正在运行，先关闭它
+
         if self.was_vpn_on:
             try:
-                # 关闭系统代理
-                subprocess.run(["cmd", "/c", resource_path("close.bat")], capture_output=True, text=True, check=True)
                 
-                # 关闭xray进程
+                subprocess.run(["cmd", "/c", resource_path("close.bat")], capture_output=True, text=True, check=True, creationflags=subprocess.CREATE_NO_WINDOW)
+
                 try:
-                    subprocess.run(["taskkill", "/f", "/im", "xray.exe"], capture_output=True, text=True, check=True)
+                    subprocess.run(["taskkill", "/f", "/im", "xray.exe"], capture_output=True, text=True, check=True, creationflags=subprocess.CREATE_NO_WINDOW)
                     print("xray进程已关闭")
                 except subprocess.CalledProcessError:
                     print("xray进程可能未运行或已关闭")
@@ -466,20 +436,16 @@ class RegionSelector(tk.Toplevel):
                 print("VPN和xray已关闭，准备换区")
             except Exception as e:
                 print(f"关闭VPN时发生错误: {e}")
-        
-        # 重置最大进度值并显示进度
+
         self.max_progress = 0
         self._update_progress_display(get_message("switching_region"))
-        
-        # 强制刷新UI，确保进度条显示
+
         self.force_ui_refresh()
-        
-        # 禁用所有按钮
+
         for btn in self.flag_buttons.values():
             for child in btn.winfo_children():
                 child.config(state="disabled")
-        
-        # 给UI额外时间渲染，然后启动切换线程（增加延迟确保打包后的exe能正确渲染进度条）
+
         self.after(200, lambda: self._start_switch_thread(flag_code))
     
     def _start_switch_thread(self, flag_code):
@@ -491,13 +457,12 @@ class RegionSelector(tk.Toplevel):
     def _switch_region_thread(self, flag_code):
         """分阶段处理切换请求：初始请求 + 轮询状态"""
         max_retries = 2
-        initial_timeout = 30  # 初始请求超时（避免nginx 60秒限制）
+        initial_timeout = 30  
         
         for attempt in range(max_retries):
             try:
                 print(f"发起切换请求... (尝试 {attempt + 1}/{max_retries})")
-                
-                # 第一阶段：发起切换请求
+
                 response = requests.post(
                     "https://vvv.xiexievpn.com/switch",
                     json={"code": self.uuid, "newZone": flag_code},
@@ -506,17 +471,17 @@ class RegionSelector(tk.Toplevel):
                 )
                 
                 if response.status_code == 200:
-                    # 切换成功，等待配置更新
+                    
                     self._wait_for_config_update()
                     self.after(0, self._on_switch_success, flag_code)
                     return
                 elif response.status_code == 202:
-                    # 服务器正在处理，进入轮询模式
+                    
                     print("服务器正在处理请求，进入轮询模式...")
                     if self._poll_switch_status(flag_code):
-                        return  # 成功
+                        return  
                     else:
-                        # 轮询失败，尝试重试或报告错误
+                        
                         if attempt < max_retries - 1:
                             print("轮询超时，正在重试...")
                             time.sleep(5)
@@ -525,10 +490,10 @@ class RegionSelector(tk.Toplevel):
                             self.after(0, self._on_switch_failed, "切换超时，请检查网络连接")
                             return
                 elif response.status_code == 504:
-                    # 网关超时，但操作可能仍在进行，直接进入轮询
+                    
                     print("网关超时，但操作可能仍在进行，进入轮询模式...")
                     if self._poll_switch_status(flag_code):
-                        return  # 成功
+                        return  
                     else:
                         if attempt < max_retries - 1:
                             print("轮询后仍未成功，正在重试...")
@@ -538,7 +503,7 @@ class RegionSelector(tk.Toplevel):
                             self.after(0, self._on_switch_failed, "切换超时，请稍后重试")
                             return
                 else:
-                    # 其他HTTP错误
+                    
                     if attempt < max_retries - 1:
                         print(f"切换失败 (HTTP {response.status_code})，正在重试...")
                         time.sleep(3)
@@ -548,10 +513,10 @@ class RegionSelector(tk.Toplevel):
                         return
                         
             except requests.Timeout:
-                # 初始请求超时，进入轮询模式看是否操作已开始
+                
                 print("初始请求超时，尝试轮询检查状态...")
                 if self._poll_switch_status(flag_code):
-                    return  # 成功
+                    return  
                 else:
                     if attempt < max_retries - 1:
                         print("轮询后未检测到变化，正在重试...")
@@ -573,8 +538,8 @@ class RegionSelector(tk.Toplevel):
     def _poll_switch_status(self, flag_code):
         """轮询切换状态，使用非阻塞方式"""
         self.poll_attempts = 0
-        self.max_poll_attempts = 120  # 120次 * 5秒 = 10分钟
-        self.poll_interval = 5000  # 5秒间隔（毫秒）
+        self.max_poll_attempts = 120  
+        self.poll_interval = 5000  
         self.target_flag_code = flag_code
         
         print(f"开始轮询切换状态，目标区域: {flag_code}")
@@ -584,7 +549,7 @@ class RegionSelector(tk.Toplevel):
     def _do_poll_attempt(self):
         """执行单次轮询尝试（非阻塞）"""
         try:
-            # 获取当前用户信息
+            
             response = requests.post(
                 "https://vvv.xiexievpn.com/getuserinfo",
                 json={"code": self.uuid},
@@ -597,33 +562,28 @@ class RegionSelector(tk.Toplevel):
                 current_zone = data.get("zone", "")
                 vmname = data.get("vmname", "")
                 v2rayurl = data.get("v2rayurl", "")
-                
-                # 更新UI显示当前状态
+
                 if current_zone and current_zone in REGION_TO_FLAG:
                     display_region = REGION_TO_FLAG[current_zone]
                     self._update_main_window_region(display_region, current_zone)
-                
-                # 检查是否切换完成
+
                 target_zone = FLAG_TO_REGION.get(self.target_flag_code, self.target_flag_code)
-                
-                # 方法1：检查zone是否已更新到目标区域
+
                 if current_zone == target_zone:
                     print(f"检测到zone已更新到: {current_zone}")
                     if v2rayurl:
                         print(f"v2rayurl也已更新，切换完成")
                         parse_and_write_config(v2rayurl)
-                        self.max_progress = 100  # 确保成功时达到100%
+                        self.max_progress = 100  
                         self._update_progress_display(get_message("switch_success"))
                         self.after(1000, lambda: self._on_switch_success(self.target_flag_code))
                         return
                     else:
                         print("zone已更新但v2rayurl未更新，继续等待...")
-                
-                # 方法2：检查vmname中是否包含目标标识
+
                 elif vmname and self.target_flag_code in vmname:
                     print(f"检测到vmname包含目标区域: {vmname}")
-                    
-                    # 如果有vmname，尝试调用createvmloading获取进度
+
                     try:
                         progress_response = requests.post(
                             "https://vvv.xiexievpn.com/createvmloading",
@@ -637,30 +597,28 @@ class RegionSelector(tk.Toplevel):
                             progress_value = progress_data.get("progress", 0)
                             
                             if isinstance(progress_value, (int, float)) and 0 <= progress_value <= 100:
-                                # 只有当新进度大于当前最大进度时才更新
+                                
                                 if progress_value > self.max_progress:
                                     self.max_progress = progress_value
                                     self._update_progress_display(f"{get_message('processing')}{self.max_progress}%")
                                     print(f"VM创建进度: {self.max_progress}%")
                     except Exception as progress_error:
                         print(f"获取进度时出错: {progress_error}")
-                    
-                    # 检查v2rayurl是否可用
+
                     if v2rayurl:
                         print("v2rayurl已可用，切换完成")
                         parse_and_write_config(v2rayurl)
-                        self.max_progress = 100  # 确保成功时达到100%
+                        self.max_progress = 100  
                         self._update_progress_display(get_message("switch_success"))
                         self.after(1000, lambda: self._on_switch_success(self.target_flag_code))
                         return
                     else:
                         print("vmname匹配但v2rayurl未更新，继续等待...")
-                
-                # 显示轮询进度（每10次显示一次，避免日志过多）
+
                 if self.poll_attempts % 10 == 0:
                     elapsed_minutes = (self.poll_attempts * self.poll_interval // 1000) // 60
                     estimated_progress = min(10 + self.poll_attempts, 90)
-                    # 只有当估计进度大于当前最大进度时才更新
+                    
                     if estimated_progress > self.max_progress:
                         self.max_progress = estimated_progress
                         progress_text = f"{get_message('processing')}{self.max_progress}%"
@@ -669,8 +627,7 @@ class RegionSelector(tk.Toplevel):
                 
         except Exception as e:
             print(f"轮询状态时出错: {e}")
-        
-        # 继续下一次轮询
+
         self.poll_attempts += 1
         
         if self.poll_attempts < self.max_poll_attempts:
@@ -683,17 +640,17 @@ class RegionSelector(tk.Toplevel):
         """更新标题标签显示进度"""
         try:
             if text == get_message("switch_success"):
-                # 恢复原标题文本和颜色
+                
                 self.title_label.config(text=get_message("select_region"), fg="black")
             else:
-                # 显示进度，使用更醒目的红色
+                
                 self.title_label.config(text=text, fg="red")
         except Exception as e:
             print(f"更新进度显示时发生错误: {e}")
     
     def _wait_for_config_update(self):
-        # 轮询获取新配置 - 参考test.html的逻辑
-        max_attempts = 200  # 增加到200次（3秒*200=10分钟）
+        
+        max_attempts = 200  
         for attempt in range(max_attempts):
             try:
                 response = requests.post(
@@ -705,42 +662,37 @@ class RegionSelector(tk.Toplevel):
                 
                 if response.status_code == 200:
                     data = response.json()
-                    
-                    # 实时更新当前区域显示
+
                     zone = data.get("zone", "")
                     if zone and zone in REGION_TO_FLAG:
                         new_region = REGION_TO_FLAG[zone]
                         self.after(0, self._update_main_window_region, new_region, zone)
                     elif zone:
                         self.after(0, self._update_main_window_region, zone, zone)
-                    
-                    # 首先检查vmname（参考test.html的pollForVmName逻辑）
+
                     vmname = data.get("vmname", "")
                     if vmname and self.selected_flag in vmname:
                         print(f"检测到新vmname: {vmname}")
-                    
-                    # 然后检查v2rayurl
+
                     v2rayurl = data.get("v2rayurl", "")
                     if v2rayurl:
-                        # 解析并更新配置
+                        
                         parse_and_write_config(v2rayurl)
                         return
                         
             except Exception as e:
                 print(f"Config update attempt {attempt + 1} failed: {e}")
-            
-            # 每10次显示一次进度（避免日志过多）
+
             if attempt % 10 == 0:
                 print(f"等待配置更新... ({attempt}/{max_attempts})")
             
-            time.sleep(3)  # 改为3秒，与test.html保持一致
+            time.sleep(3)  
     
     def _update_main_window_region(self, flag_code, zone):
         """更新主窗口的区域显示"""
         global current_region
         current_region = flag_code
-        
-        # 直接更新主窗口的区域显示
+
         try:
             if 'region_label' in globals() and region_label and region_label.winfo_exists():
                 region_text = f"{get_message('current_region')}: {get_message(f'region_{flag_code}')}"
@@ -754,14 +706,12 @@ class RegionSelector(tk.Toplevel):
         self.current_zone = flag_code
         
         self._update_progress_display(get_message("switch_success"))
-        
-        # 更新主窗口的区域显示
+
         update_region_display()
-        
-        # 如果之前VPN是开启的，重新开启VPN
+
         if hasattr(self, 'was_vpn_on') and self.was_vpn_on:
             try:
-                subprocess.run(["cmd", "/c", resource_path("internet.bat")], capture_output=True, text=True, check=True)
+                subprocess.run(["cmd", "/c", resource_path("internet.bat")], capture_output=True, text=True, check=True, creationflags=subprocess.CREATE_NO_WINDOW)
                 proxy_state = 1
                 if 'btn_general_proxy' in globals() and btn_general_proxy:
                     btn_general_proxy.config(state="disabled")
@@ -770,20 +720,17 @@ class RegionSelector(tk.Toplevel):
                 print("VPN已自动重新开启")
             except Exception as e:
                 print(f"自动重新开启VPN时发生错误: {e}")
-        
-        # 2秒后关闭窗口
+
         self.after(2000, self.close_window)
     
     def _on_switch_failed(self, error_msg):
-        # 恢复原标题标签文本和颜色
-        self.title_label.config(text=get_message("select_region"), fg="black")
         
-        # 恢复按钮状态
+        self.title_label.config(text=get_message("select_region"), fg="black")
+
         for btn in self.flag_buttons.values():
             for child in btn.winfo_children():
                 child.config(state="normal")
-        
-        # 恢复原来的高亮
+
         self.highlight_flag(self.current_zone)
         self.switching = False
         
@@ -807,7 +754,7 @@ def update_region_display():
                 region_text = f"{get_message('current_region')}: {get_message(f'region_{current_region}')}"
                 region_label.config(text=region_text)
             else:
-                # 显示加载状态
+                
                 region_text = f"{get_message('current_region')}: {get_message('region_loading')}"
                 region_label.config(text=region_text)
     except Exception as e:
@@ -819,7 +766,7 @@ def force_window_refresh():
     if 'window' in globals() and window:
         window.update_idletasks()
         window.update()
-        # Windows特定：使用after延迟确保渲染
+        
         if sys.platform == 'win32':
             window.after(1, lambda: window.update())
 
@@ -840,13 +787,13 @@ def toggle_autostart():
                 "/F",
         ]
         try:
-             result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+             result = subprocess.run(cmd, capture_output=True, text=True, check=True, creationflags=subprocess.CREATE_NO_WINDOW)
         except subprocess.CalledProcessError as e:
                print(e.stderr)
         if chk_autostart.get():
-            subprocess.run(['schtasks', '/Change', '/TN', 'simplevpn', '/ENABLE'], capture_output=True, text=True, check=True)
+            subprocess.run(['schtasks', '/Change', '/TN', 'simplevpn', '/ENABLE'], capture_output=True, text=True, check=True, creationflags=subprocess.CREATE_NO_WINDOW)
         else:
-            subprocess.run(['schtasks', '/Change', '/TN', 'simplevpn', '/DISABLE'], capture_output=True, text=True, check=True)
+            subprocess.run(['schtasks', '/Change', '/TN', 'simplevpn', '/DISABLE'], capture_output=True, text=True, check=True, creationflags=subprocess.CREATE_NO_WINDOW)
     except subprocess.CalledProcessError as e:
         messagebox.showerror("Error", f"{get_message('failed_autostart')}: {e.stderr}\nReturn code: {e.returncode}")
 
@@ -855,15 +802,14 @@ def on_chk_change(*args):
 
 def set_general_proxy():
     global proxy_state, config_ready
-    
-    # 检查配置文件是否已准备好
+
     if not config_ready and not os.path.exists(resource_path("config.json")):
         messagebox.showinfo(get_text("app_title"), get_message("config_preparing"))
         return
     
     try:
-        subprocess.run(["cmd", "/c", resource_path("close.bat")], capture_output=True, text=True, check=True)
-        subprocess.run(["cmd", "/c", resource_path("internet.bat")], capture_output=True, text=True, check=True)
+        subprocess.run(["cmd", "/c", resource_path("close.bat")], capture_output=True, text=True, check=True, creationflags=subprocess.CREATE_NO_WINDOW)
+        subprocess.run(["cmd", "/c", resource_path("internet.bat")], capture_output=True, text=True, check=True, creationflags=subprocess.CREATE_NO_WINDOW)
         messagebox.showinfo("Information", get_message("vpn_setup_success"))
         btn_general_proxy.config(state="disabled")
         btn_close_proxy.config(state="normal")
@@ -875,7 +821,7 @@ def set_general_proxy():
 def close_proxy():
     global proxy_state
     try:
-        subprocess.run(["cmd", "/c", resource_path("close.bat")], capture_output=True, text=True, check=True)
+        subprocess.run(["cmd", "/c", resource_path("close.bat")], capture_output=True, text=True, check=True, creationflags=subprocess.CREATE_NO_WINDOW)
         messagebox.showinfo("Information", get_message("vpn_closed"))
         btn_close_proxy.config(state="disabled")
         btn_general_proxy.config(state="normal")
@@ -890,7 +836,7 @@ def on_closing():
     if close_state == "normal":
         if general_state == "disabled":
             try:
-                subprocess.run(["cmd", "/c", resource_path("close.bat")], capture_output=True, text=True, check=True)
+                subprocess.run(["cmd", "/c", resource_path("close.bat")], capture_output=True, text=True, check=True, creationflags=subprocess.CREATE_NO_WINDOW)
                 messagebox.showinfo("Information", get_message("vpn_temp_closed"))
             except subprocess.CalledProcessError as e:
                 messagebox.showerror("Error", f"{get_message('failed_exit')}: {e.stderr}")
@@ -960,13 +906,11 @@ def poll_getuserinfo(uuid):
         v2rayurl = response_data.get("v2rayurl", "")
         zone = response_data.get("zone", "")
 
-        # 统一更新区域显示（与fetch_config_data逻辑一致）
         if zone and zone in REGION_TO_FLAG:
             current_region = REGION_TO_FLAG[zone]
         elif zone:
             current_region = zone
-        
-        # 更新主窗口显示
+
         update_region_display()
 
         if v2rayurl:
@@ -1007,7 +951,8 @@ def parse_and_write_config(url_string):
         
         config_data = {
             "log": {
-                "loglevel": "error"
+                "loglevel": "none",
+                "error": ""
             },
             "dns": {
                 "servers": [
@@ -1015,30 +960,19 @@ def parse_and_write_config(url_string):
                         "tag": "bootstrap", 
                         "address": "223.5.5.5", 
                         "domains": [], 
-                        "expectIPs": [
-                            "geoip:cn"
-                        ], 
                         "detour": "direct"
                     }, 
                     {
                         "tag": "remote-doh", 
                         "address": "https://dns.google/dns-query", 
                         "detour": "proxy"
-                    }, 
-                    "localhost"
+                    }
                 ], 
                 "queryStrategy": "UseIPv4"
             },
             "routing": {
                 "domainStrategy": "IPIfNonMatch",
-                "rules": [
-                    {
-                        "type": "field", 
-                        "inboundTag": [
-                            "dns-in"
-                        ], 
-                        "outboundTag": "proxy"
-                    }, 
+                "rules": [ 
                     {
                         "type": "field",
                         "domain": ["geosite:category-ads-all"],
@@ -1057,22 +991,11 @@ def parse_and_write_config(url_string):
                     {
                         "type": "field",
                         "ip": ["geoip:cn", "geoip:private"],
-                        "outboundTag": "proxy"
+                        "outboundTag": "direct"
                     }
                 ]
             },
             "inbounds": [
-                {
-                    "tag": "dns-in", 
-                    "listen": "127.0.0.1", 
-                    "port": 53, 
-                    "protocol": "dokodemo-door", 
-                    "settings": {
-                        "address": "8.8.8.8", 
-                        "port": 53, 
-                        "network": "tcp,udp"
-                    }
-                },
                 {
                     "listen": "127.0.0.1",
                     "port": 10808,
@@ -1129,17 +1052,14 @@ def parse_and_write_config(url_string):
 
         with open(resource_path("config.json"), "w", encoding="utf-8") as config_file:
             json.dump(config_data, config_file, indent=4)
-        
-        # 标记配置已准备完成
+
         global config_ready, pending_autostart
         config_ready = True
-        
-        # 如果有待启动的自动启动请求，现在执行
+
         if pending_autostart:
             pending_autostart = False
             set_general_proxy()
-        
-        # 启用VPN按钮
+
         if 'btn_general_proxy' in globals() and btn_general_proxy is not None:
             btn_general_proxy.config(state="normal")
             
@@ -1161,14 +1081,12 @@ def fetch_config_data(uuid):
         response_data = response.json()
         v2rayurl = response_data.get("v2rayurl", "")
         zone = response_data.get("zone", "")
-        
-        # 更新当前区域
+
         if zone and zone in REGION_TO_FLAG:
             current_region = REGION_TO_FLAG[zone]
         elif zone:
             current_region = zone
-        
-        # 更新主窗口显示
+
         update_region_display()
         
         public_key = response_data.get("publicKey", "")
@@ -1203,8 +1121,7 @@ def show_main_window(uuid):
 
     btn_general_proxy = tk.Button(window, text=get_text("open_vpn"), command=set_general_proxy)
     btn_close_proxy = tk.Button(window, text=get_text("close_vpn"), command=close_proxy)
-    
-    # 初始状态：如果配置未准备好，禁用开启VPN按钮
+
     if not config_ready and not os.path.exists(resource_path("config.json")):
         btn_general_proxy.config(state="disabled")
     
@@ -1218,20 +1135,16 @@ def show_main_window(uuid):
     chk_autostart_button = tk.Checkbutton(window, text=get_text("autostart"), variable=chk_autostart, command=toggle_autostart)
     chk_autostart_button.pack(pady=10)
 
-    # 添加区域切换按钮
     btn_switch_region = tk.Button(window, text=get_text("switch_region"), command=lambda: open_region_selector(uuid))
     btn_switch_region.pack(pady=10)
-    
-    # 显示当前区域
+
     region_label = tk.Label(window, text="", font=("Arial", 9), fg="gray")
     region_label.pack(pady=5)
 
     fetch_config_data(uuid)
-    
-    # 首次更新区域显示
+
     window.after(1000, update_region_display)
 
-    # 检查更新（延迟3秒，让界面先加载完成）
     def check_update_async():
         def update_check():
             update_info = check_for_updates()
@@ -1249,7 +1162,7 @@ def show_main_window(uuid):
                 if config_ready:
                     set_general_proxy()
                 else:
-                    pending_autostart = True  # 等待配置准备完成后自动启动
+                    pending_autostart = True  
         except ValueError:
             pass
 

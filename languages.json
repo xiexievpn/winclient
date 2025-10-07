@@ -13,7 +13,7 @@
     "copy": "复制",
     "paste": "粘贴",
     "select_all": "全选",
-    "region_url": "https://cn.xiexievpn.com/app.html",
+    "region_url": "https://xiexievpn.com/cn/app.html",
     "messages": {
       "already_running": "程序已经在运行中，请勿重复启动！",
       "vpn_setup_success": "加速设置成功",
@@ -78,7 +78,7 @@
     "copy": "copy",
     "paste": "paste",
     "select_all": "select all",
-    "region_url": "https://xiexievpn.com/app.html",
+    "region_url": "https://xiexievpn.com/en/app.html",
     "messages": {
       "already_running": "The program is already running, please do not start it again!",
       "vpn_setup_success": "VPN setup successfully",
