@@ -1,0 +1,42 @@
+name: Build Windows Client
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '**/*.py'
+      - '**/*.bat'
+      - '**/*.json'
+      - 'flags/**'
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Dependencies
+        run: pip install pywin32 pyinstaller pillow requests
+
+      - name: Download Xray
+        run: |
+          Invoke-WebRequest -Uri "https://github.com/XTLS/Xray-core/releases/download/v25.3.6/Xray-windows-64.zip" -OutFile "Xray.zip"
+          Expand-Archive -Path "Xray.zip" -DestinationPath "." -Force
+
+      - name: Build EXE
+        shell: cmd
+        run: pyinstaller --onefile --noconsole --add-data "favicon.ico;." --add-data "close.bat;." --add-data "internet.bat;." --add-data "xray.exe;." --add-data "geoip.dat;." --add-data "geosite.dat;." --add-data "languages.json;." --add-data "flags;flags" --hidden-import pywin32 --hidden-import win32event --hidden-import win32api --hidden-import PIL --collect-all pywin32 --name "xiexievpn" --icon "favicon.ico" main.py
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: xiexievpn-windows
+          path: dist/xiexievpn.exe
+          retention-days: 30
