@@ -6,19 +6,16 @@ import json
 import webbrowser
 import platform
 import urllib.parse
-import win32event
-import win32api
-import winerror
 import locale
 import threading
 import time
 import tempfile
 import shutil
+import ctypes
 
 # 版本常量
 CURRENT_VERSION = "1.0.4"
 
-# 尝试导入PIL，如果失败则使用备用方案
 try:
     from PIL import Image, ImageTk
     PIL_AVAILABLE = True
@@ -88,33 +85,19 @@ if not is_admin():
 load_language()
 
 mutex_name = "XieXieVPN_SingleInstance_Mutex"
+kernel32 = ctypes.windll.kernel32
 mutex = None
 
 def acquire_mutex():
     global mutex
-    for i in range(3):
-        try:
-            mutex = win32event.CreateMutex(None, False, mutex_name)
-            last_error = win32api.GetLastError()
-            
-            if last_error == winerror.ERROR_ALREADY_EXISTS:
-                # 锁已存在
-                if i < 2: 
-                    # 如果是前两次尝试，可能是更新刚重启，等待一下
-                    time.sleep(1) 
-                    if mutex:
-                        win32api.CloseHandle(mutex)
-                    continue
-                else:
-                    return False # 确实有另一个实例在运行
-            return True
-        except Exception as e:
-            print(f"Mutex error: {e}")
-            return True # 出错也允许运行，避免程序死掉
-    return False
+    mutex = kernel32.CreateMutexW(None, False, mutex_name)
+    last_error = kernel32.GetLastError()
+    
+    if last_error == 183:
+        return False
+    return True
 
 if not acquire_mutex():
-    # 程序已运行，直接退出
     sys.exit(0)
 
 # 版本比较函数
@@ -224,7 +207,7 @@ del "%~f0"
             f.write(script_content)
 
         if mutex:
-            win32api.CloseHandle(mutex)
+            ctypes.windll.kernel32.CloseHandle(mutex)
             mutex = None
         
         # 启动更新脚本
@@ -1091,7 +1074,7 @@ def parse_and_write_config(url_string):
                     },
                     "sockopt": {
                         "tcpNoDelay": True, 
-                        "tcpKeepAliveIdle": 
+                        "tcpKeepAliveIdle": 100
                     }
                 }
             },
