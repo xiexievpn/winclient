@@ -11,7 +11,6 @@ import threading
 import time
 import tempfile
 import shutil
-import ctypes
 
 # 版本常量
 CURRENT_VERSION = "1.0.4"
@@ -241,17 +240,6 @@ config_ready = False        # 标记config.json是否已创建
 pending_autostart = False   # 标记是否需要自动启动
 current_region = None       # 当前区域
 current_uuid = None         # 当前用户UUID
-
-mutex_name = "XieXieVPN_SingleInstance_Mutex"
-try:
-    mutex = win32event.CreateMutex(None, False, mutex_name)
-    last_error = win32api.GetLastError()
-    
-    if last_error == winerror.ERROR_ALREADY_EXISTS:
-        messagebox.showwarning(get_text("login_title"), get_message("already_running"))
-        sys.exit(0)
-except Exception as e:
-    print(f"{get_message('mutex_error')}: {e}")
 
 def get_persistent_path(filename):
     if platform.system() == "Windows":
