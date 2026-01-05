@@ -104,18 +104,26 @@ def compare_versions(version1, version2):
         return 0
 
 def download_file(url, local_path):
-    """下载文件"""
+    """下载文件（增加User-Agent伪装，并返回具体错误信息）"""
     try:
-        response = requests.get(url, stream=True, timeout=30)
+        # 伪装成 Chrome 浏览器，防止服务器拦截 (403错误)
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+        }
+        
+        # 增加 headers 和 timeout
+        response = requests.get(url, headers=headers, stream=True, timeout=60)
+        # 如果是 404 (文件不存在) 或 403 (被拒绝)，这里会直接抛出异常
         response.raise_for_status()
 
         with open(local_path, 'wb') as f:
             for chunk in response.iter_content(chunk_size=8192):
-                f.write(chunk)
-        return True
+                if chunk:
+                    f.write(chunk)
+        return True, None # 成功
     except Exception as e:
         print(f"Download failed: {e}")
-        return False
+        return False, str(e)
 
 def check_for_updates():
     """检查更新"""
@@ -136,19 +144,23 @@ def check_for_updates():
     return None
 
 def download_and_replace():
-    """下载新版本并替换当前 exe"""
+    """下载新版本并替换当前 exe（修复环境变量污染问题）"""
     try:
-        
         temp_dir = tempfile.gettempdir()
         temp_path = os.path.join(temp_dir, 'xiexievpn_new.exe')
 
+        # --- 界面部分 (保持不变) ---
         download_window = tk.Toplevel()
         download_window.title(get_text("app_title"))
-        download_window.geometry("300x100")
-        download_window.iconbitmap(resource_path("favicon.ico"))
+        download_window.geometry("400x150")
+        try:
+            download_window.iconbitmap(resource_path("favicon.ico"))
+        except:
+            pass
         download_window.resizable(False, False)
+        download_window.grab_set()
 
-        label = tk.Label(download_window, text=get_message("updating"))
+        label = tk.Label(download_window, text=get_message("updating") if get_message("updating") != "updating" else "Downloading update...")
         label.pack(pady=20)
 
         progress = ttk.Progressbar(download_window, mode='indeterminate')
@@ -157,35 +169,61 @@ def download_and_replace():
 
         download_window.update()
 
-        if not download_file("https://xiexievpn.com/win/xiexievpn.exe", temp_path):
-            download_window.destroy()
-            messagebox.showerror("Error", get_message("download_failed"))
-            return
-
+        target_url = "https://xiexievpn.com/cn/win/xiexievpn.exe"
+        success, error_msg = download_file(target_url, temp_path)
         download_window.destroy()
+
+        if not success:
+            messagebox.showerror("Update Error", f"{get_message('download_failed')}\n\nDebug Info:\n{error_msg}")
+            return
 
         current_exe = sys.executable
         update_script = os.path.join(temp_dir, 'update_xiexievpn.bat')
 
+        # --- 生成批处理脚本 ---
+        # 去掉 start 的 /d 参数，直接运行 exe 更加稳定
         script_content = f'''@echo off
 echo Updating XieXieVPN...
 ping 127.0.0.1 -n 3 > nul
 del /f /q "{current_exe}" 2>nul
 move /y "{temp_path}" "{current_exe}" >nul
 cd /d "{os.path.dirname(current_exe)}"
-start "" /d "{os.path.dirname(current_exe)}" "{current_exe}"
+start "" "{current_exe}"
 del "%~f0"
 '''
 
         with open(update_script, 'w', encoding='gbk') as f:
             f.write(script_content)
 
-        subprocess.Popen(update_script, shell=True, creationflags=subprocess.CREATE_NO_WINDOW)
+        # ==========================================
+        # 【关键修改】清洗环境变量
+        # ==========================================
+        # 1. 复制当前环境变量
+        env = os.environ.copy()
+        
+        # 2. 移除 PyInstaller 特有的环境变量
+        # 这些变量如果不移除，新程序会去旧程序的临时目录找文件
+        keys_to_remove = ['_MEIPASS', '_MEIPASS2', 'PYTHONHOME', 'PYTHONPATH']
+        for key in keys_to_remove:
+            env.pop(key, None)
+            
+        # 3. 清洗 PATH：移除包含当前临时目录的路径
+        if hasattr(sys, '_MEIPASS'):
+            current_temp = sys._MEIPASS
+            if 'PATH' in env:
+                # 过滤掉包含旧临时目录的路径
+                paths = env['PATH'].split(os.pathsep)
+                clean_paths = [p for p in paths if current_temp not in p]
+                env['PATH'] = os.pathsep.join(clean_paths)
+
+        # 4. 使用清洗后的 env 启动批处理脚本
+        subprocess.Popen(update_script, shell=True, env=env, creationflags=subprocess.CREATE_NO_WINDOW)
+        
         sys.exit(0)
 
     except Exception as e:
         print(f"Update failed: {e}")
-        messagebox.showerror("Error", f"Update failed: {e}")
+        messagebox.showerror("Error", f"Update process failed: {e}")
 
 def show_update_dialog(update_info):
     """显示更新对话框"""
@@ -1047,7 +1085,7 @@ def parse_and_write_config(url_string, ph_unlock_domains=None):
                     },
                     {
                         "tag": "remote-doh",
-                        "address": "https://dns.google/dns-query",
+                        "address": "https://1.1.1.1/dns-query",
                         "detour": "proxy"
                     }
                 ],
@@ -1206,8 +1244,6 @@ label_uuid.pack(pady=10)
 entry_uuid = tk.Entry(login_window)
 entry_uuid.pack(pady=5)
 entry_uuid.bind("<Control-Key-a>", lambda event: entry_uuid.select_range(0, tk.END))
-entry_uuid.bind("<Control-Key-c>", lambda event: login_window.clipboard_append(entry_uuid.selection_get()))
-entry_uuid.bind("<Control-Key-v>", lambda event: entry_uuid.insert(tk.INSERT, login_window.clipboard_get()))
 
 menu = Menu(entry_uuid, tearoff=0)
 menu.add_command(label=get_text("copy"), command=lambda: login_window.clipboard_append(entry_uuid.selection_get()))
