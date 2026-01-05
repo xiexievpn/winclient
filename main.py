@@ -15,7 +15,7 @@ import time
 import tempfile
 import shutil
 
-CURRENT_VERSION = "1.0.5"
+CURRENT_VERSION = "1.0.7"
 
 try:
     from PIL import Image, ImageTk
@@ -144,12 +144,11 @@ def check_for_updates():
     return None
 
 def download_and_replace():
-    """下载新版本并替换当前 exe（修复环境变量污染问题）"""
     try:
         temp_dir = tempfile.gettempdir()
         temp_path = os.path.join(temp_dir, 'xiexievpn_new.exe')
 
-        # --- 界面部分 (保持不变) ---
+        # --- 下载界面 ---
         download_window = tk.Toplevel()
         download_window.title(get_text("app_title"))
         download_window.geometry("400x150")
@@ -181,43 +180,42 @@ def download_and_replace():
         update_script = os.path.join(temp_dir, 'update_xiexievpn.bat')
 
         # --- 生成批处理脚本 ---
-        # 去掉 start 的 /d 参数，直接运行 exe 更加稳定
+        # 脚本逻辑：
+        # 1. 延时约3-4秒 (ping 127.0.0.1 -n 4)，给主程序退出的时间
+        # 2. 强制删除旧 exe
+        # 3. 将下载的新 exe 移动过来
+        # 4. 删除脚本自己
         script_content = f'''@echo off
-echo Updating XieXieVPN...
-ping 127.0.0.1 -n 3 > nul
+echo Installing Update...
+ping 127.0.0.1 -n 4 > nul
 del /f /q "{current_exe}" 2>nul
 move /y "{temp_path}" "{current_exe}" >nul
-cd /d "{os.path.dirname(current_exe)}"
-start "" "{current_exe}"
 del "%~f0"
 '''
 
         with open(update_script, 'w', encoding='gbk') as f:
             f.write(script_content)
 
-        # ==========================================
-        # 【关键修改】清洗环境变量
-        # ==========================================
-        # 1. 复制当前环境变量
-        env = os.environ.copy()
+        # --- 提示用户手动重启 ---
+        # 这里的关键是：先弹窗，用户点确定后，再运行脚本并退出。
+        # 这样避免脚本已经开始跑了，用户还没点确定的“竞态条件”。
         
-        # 2. 移除 PyInstaller 特有的环境变量
-        # 这些变量如果不移除，新程序会去旧程序的临时目录找文件
-        keys_to_remove = ['_MEIPASS', '_MEIPASS2', 'PYTHONHOME', 'PYTHONPATH']
-        for key in keys_to_remove:
-            env.pop(key, None)
-            
-        # 3. 清洗 PATH：移除包含当前临时目录的路径
-        if hasattr(sys, '_MEIPASS'):
-            current_temp = sys._MEIPASS
-            if 'PATH' in env:
-                # 过滤掉包含旧临时目录的路径
-                paths = env['PATH'].split(os.pathsep)
-                clean_paths = [p for p in paths if current_temp not in p]
-                env['PATH'] = os.pathsep.join(clean_paths)
+        msg_title = get_text("update_ready_title") 
+        if msg_title == "update_ready_title": msg_title = "Update Ready"
+        
+        msg_body = get_text("update_ready_msg")
+        if msg_body == "update_ready_msg": 
+            # 默认提示语
+            if get_system_language() == 'zh':
+                msg_body = "更新已下载完成。\n\n程序将自动关闭。\n请等待几秒钟，然后手动重新打开程序以应用更新。"
+            else:
+                msg_body = "The update has been downloaded.\n\nThe application will close now.\nPlease wait a few seconds and restart it manually."
 
-        # 4. 使用清洗后的 env 启动批处理脚本
-        subprocess.Popen(update_script, shell=True, env=env, creationflags=subprocess.CREATE_NO_WINDOW)
+        messagebox.showinfo(msg_title, msg_body)
+
+        # --- 运行脚本并退出 ---
+        # 使用 CREATE_NO_WINDOW 隐藏黑框
+        subprocess.Popen(update_script, shell=True, creationflags=subprocess.CREATE_NO_WINDOW)
         
         sys.exit(0)
 
