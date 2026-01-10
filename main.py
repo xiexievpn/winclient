@@ -104,26 +104,18 @@ def compare_versions(version1, version2):
         return 0
 
 def download_file(url, local_path):
-    """下载文件（增加User-Agent伪装，并返回具体错误信息）"""
+    """下载文件"""
     try:
-        # 伪装成 Chrome 浏览器，防止服务器拦截 (403错误)
-        headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-        }
-        
-        # 增加 headers 和 timeout
-        response = requests.get(url, headers=headers, stream=True, timeout=60)
-        # 如果是 404 (文件不存在) 或 403 (被拒绝)，这里会直接抛出异常
+        response = requests.get(url, stream=True, timeout=30)
         response.raise_for_status()
 
         with open(local_path, 'wb') as f:
             for chunk in response.iter_content(chunk_size=8192):
-                if chunk:
-                    f.write(chunk)
-        return True, None # 成功
+                f.write(chunk)
+        return True
     except Exception as e:
         print(f"Download failed: {e}")
-        return False, str(e)
+        return False
 
 def check_for_updates():
     """检查更新"""
@@ -144,22 +136,19 @@ def check_for_updates():
     return None
 
 def download_and_replace():
+    """下载新版本并替换当前 exe"""
     try:
+        
         temp_dir = tempfile.gettempdir()
         temp_path = os.path.join(temp_dir, 'xiexievpn_new.exe')
 
-        # --- 下载界面 ---
         download_window = tk.Toplevel()
         download_window.title(get_text("app_title"))
-        download_window.geometry("400x150")
-        try:
-            download_window.iconbitmap(resource_path("favicon.ico"))
-        except:
-            pass
+        download_window.geometry("300x100")
+        download_window.iconbitmap(resource_path("favicon.ico"))
         download_window.resizable(False, False)
-        download_window.grab_set()
 
-        label = tk.Label(download_window, text=get_message("updating") if get_message("updating") != "updating" else "Downloading update...")
+        label = tk.Label(download_window, text=get_message("updating"))
         label.pack(pady=20)
 
         progress = ttk.Progressbar(download_window, mode='indeterminate')
@@ -168,60 +157,35 @@ def download_and_replace():
 
         download_window.update()
 
-        target_url = "https://xiexievpn.com/cn/win/xiexievpn.exe"
-        success, error_msg = download_file(target_url, temp_path)
-        download_window.destroy()
-
-        if not success:
-            messagebox.showerror("Update Error", f"{get_message('download_failed')}\n\nDebug Info:\n{error_msg}")
+        if not download_file("https://xiexievpn.com/win/xiexievpn.exe", temp_path):
+            download_window.destroy()
+            messagebox.showerror("Error", get_message("download_failed"))
             return
+
+        download_window.destroy()
 
         current_exe = sys.executable
         update_script = os.path.join(temp_dir, 'update_xiexievpn.bat')
 
-        # --- 生成批处理脚本 ---
-        # 脚本逻辑：
-        # 1. 延时约3-4秒 (ping 127.0.0.1 -n 4)，给主程序退出的时间
-        # 2. 强制删除旧 exe
-        # 3. 将下载的新 exe 移动过来
-        # 4. 删除脚本自己
         script_content = f'''@echo off
-echo Installing Update...
-ping 127.0.0.1 -n 4 > nul
+echo Updating XieXieVPN...
+ping 127.0.0.1 -n 3 > nul
 del /f /q "{current_exe}" 2>nul
 move /y "{temp_path}" "{current_exe}" >nul
+cd /d "{os.path.dirname(current_exe)}"
+start "" /d "{os.path.dirname(current_exe)}" "{current_exe}"
 del "%~f0"
 '''
 
         with open(update_script, 'w', encoding='gbk') as f:
             f.write(script_content)
 
-        # --- 提示用户手动重启 ---
-        # 这里的关键是：先弹窗，用户点确定后，再运行脚本并退出。
-        # 这样避免脚本已经开始跑了，用户还没点确定的“竞态条件”。
-        
-        msg_title = get_text("update_ready_title") 
-        if msg_title == "update_ready_title": msg_title = "Update Ready"
-        
-        msg_body = get_text("update_ready_msg")
-        if msg_body == "update_ready_msg": 
-            # 默认提示语
-            if get_system_language() == 'zh':
-                msg_body = "更新已下载完成。\n\n程序将自动关闭。\n请等待几秒钟，然后手动重新打开程序以应用更新。"
-            else:
-                msg_body = "The update has been downloaded.\n\nThe application will close now.\nPlease wait a few seconds and restart it manually."
-
-        messagebox.showinfo(msg_title, msg_body)
-
-        # --- 运行脚本并退出 ---
-        # 使用 CREATE_NO_WINDOW 隐藏黑框
         subprocess.Popen(update_script, shell=True, creationflags=subprocess.CREATE_NO_WINDOW)
-        
         sys.exit(0)
 
     except Exception as e:
         print(f"Update failed: {e}")
-        messagebox.showerror("Error", f"Update process failed: {e}")
+        messagebox.showerror("Error", f"Update failed: {e}")
 
 def show_update_dialog(update_info):
     """显示更新对话框"""
@@ -598,7 +562,6 @@ class RegionSelector(tk.Toplevel):
                 current_zone = data.get("zone", "")
                 vmname = data.get("vmname", "")
                 v2rayurl = data.get("v2rayurl", "")
-                ph_unlock_domains = data.get("phUnlockDomains", [])
 
                 if current_zone and current_zone in REGION_TO_FLAG:
                     display_region = REGION_TO_FLAG[current_zone]
@@ -610,7 +573,7 @@ class RegionSelector(tk.Toplevel):
                     print(f"检测到zone已更新到: {current_zone}")
                     if v2rayurl:
                         print(f"v2rayurl也已更新，切换完成")
-                        parse_and_write_config(v2rayurl, ph_unlock_domains)
+                        parse_and_write_config(v2rayurl)
                         self.max_progress = 100  
                         self._update_progress_display(get_message("switch_success"))
                         self.after(1000, lambda: self._on_switch_success(self.target_flag_code))
@@ -644,7 +607,7 @@ class RegionSelector(tk.Toplevel):
 
                     if v2rayurl:
                         print("v2rayurl已可用，切换完成")
-                        parse_and_write_config(v2rayurl, ph_unlock_domains)
+                        parse_and_write_config(v2rayurl)
                         self.max_progress = 100  
                         self._update_progress_display(get_message("switch_success"))
                         self.after(1000, lambda: self._on_switch_success(self.target_flag_code))
@@ -714,9 +677,7 @@ class RegionSelector(tk.Toplevel):
                     v2rayurl = data.get("v2rayurl", "")
                     if v2rayurl:
                         
-                        ph_unlock_domains = data.get("phUnlockDomains", [])
-                        
-                        parse_and_write_config(v2rayurl, ph_unlock_domains)
+                        parse_and_write_config(v2rayurl)
                         return
                         
             except Exception as e:
@@ -944,7 +905,6 @@ def poll_getuserinfo(uuid):
         response_data = response.json()
         v2rayurl = response_data.get("v2rayurl", "")
         zone = response_data.get("zone", "")
-        ph_unlock_domains = response_data.get("phUnlockDomains", [])
 
         if zone and zone in REGION_TO_FLAG:
             current_region = REGION_TO_FLAG[zone]
@@ -954,7 +914,7 @@ def poll_getuserinfo(uuid):
         update_region_display()
 
         if v2rayurl:
-            parse_and_write_config(v2rayurl, ph_unlock_domains)
+            parse_and_write_config(v2rayurl)
             return
         else:
             window.after(3000, lambda: poll_getuserinfo(uuid))
@@ -962,14 +922,9 @@ def poll_getuserinfo(uuid):
     except requests.exceptions.RequestException as e:
         window.after(3000, lambda: poll_getuserinfo(uuid))
 
-def parse_and_write_config(url_string, ph_unlock_domains=None):
+def parse_and_write_config(url_string):
     """
     解析VLESS URL并生成Xray配置文件
-
-    参数:
-        url_string: VLESS协议URL
-        ph_unlock_domains: 菲律宾流量解锁域名列表（可选）
-                          用于实现链式代理：客户端 → VPS → FRP隧道 → 菲律宾
     """
     try:
         if not url_string.startswith("vless://"):
@@ -1139,7 +1094,6 @@ def fetch_config_data(uuid):
         response_data = response.json()
         v2rayurl = response_data.get("v2rayurl", "")
         zone = response_data.get("zone", "")
-        ph_unlock_domains = response_data.get("phUnlockDomains", [])
 
         if zone and zone in REGION_TO_FLAG:
             current_region = REGION_TO_FLAG[zone]
@@ -1160,7 +1114,7 @@ def fetch_config_data(uuid):
             window.after(10, lambda: poll_getuserinfo(uuid))
 
         else:
-            parse_and_write_config(v2rayurl, ph_unlock_domains)
+            parse_and_write_config(v2rayurl)
             if public_key and short_id:
                 print(get_message("user_config_updated"))
 
@@ -1242,6 +1196,8 @@ label_uuid.pack(pady=10)
 entry_uuid = tk.Entry(login_window)
 entry_uuid.pack(pady=5)
 entry_uuid.bind("<Control-Key-a>", lambda event: entry_uuid.select_range(0, tk.END))
+entry_uuid.bind("<Control-Key-c>", lambda event: login_window.clipboard_append(entry_uuid.selection_get()))
+entry_uuid.bind("<Control-Key-v>", lambda event: entry_uuid.insert(tk.INSERT, login_window.clipboard_get()))
 
 menu = Menu(entry_uuid, tearoff=0)
 menu.add_command(label=get_text("copy"), command=lambda: login_window.clipboard_append(entry_uuid.selection_get()))
