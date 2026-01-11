@@ -883,8 +883,6 @@ tk.Label(login_window, text=get_text("login_prompt")).pack(pady=10)
 entry_uuid = tk.Entry(login_window)
 entry_uuid.pack(pady=5)
 entry_uuid.bind("<Control-Key-a>", lambda event: entry_uuid.select_range(0, tk.END))
-entry_uuid.bind("<Control-Key-c>", lambda event: login_window.clipboard_append(entry_uuid.selection_get()))
-entry_uuid.bind("<Control-Key-v>", lambda event: entry_uuid.insert(tk.INSERT, login_window.clipboard_get()))
 
 menu = Menu(entry_uuid, tearoff=0)
 menu.add_command(label=get_text("copy"), command=lambda: login_window.clipboard_append(entry_uuid.selection_get()))
