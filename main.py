@@ -16,7 +16,7 @@ import tempfile
 import shutil
 from datetime import datetime
 
-CURRENT_VERSION = "1.0.7"
+CURRENT_VERSION = "1.0.8"
 
 proxy_state = 0            
 is_manual_switching = False
@@ -678,7 +678,7 @@ def parse_and_write_config(url_string):
         sni = params.get('sni', [f"{domain}.rocketchats.xyz"])[0].replace("www.", "")
 
         outbounds = [
-            {"protocol": "vless", "settings": {"vnext": [{"address": f"{domain}.rocketchats.xyz", "port": 443, "users": [{"id": uuid, "encryption": "none", "flow": "xtls-rprx-vision"}]}]}, "streamSettings": {"network": "tcp", "security": "reality", "realitySettings": {"show": False, "fingerprint": "chrome", "serverName": sni, "publicKey": public_key, "shortId": short_id, "spiderX": ""}}, "tag": "proxy"},
+            {"protocol": "vless", "settings": {"vnext": [{"address": sni, "port": 443, "users": [{"id": uuid, "encryption": "none", "flow": "xtls-rprx-vision"}]}]}, "streamSettings": {"network": "tcp", "security": "reality", "realitySettings": {"show": False, "fingerprint": "chrome", "serverName": sni, "publicKey": public_key, "shortId": short_id, "spiderX": ""}}, "tag": "proxy"},
             {"protocol": "freedom", "tag": "direct"},
             {"protocol": "blackhole", "tag": "block"}
         ]
