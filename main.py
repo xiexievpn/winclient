@@ -14,11 +14,10 @@ import threading
 import time
 import tempfile
 import shutil
-from datetime import datetime
 
 CURRENT_VERSION = "1.0.9"
 
-proxy_state = 0            
+proxy_state = 0
 is_manual_switching = False
 pending_autostart = False
 current_region = None
@@ -31,10 +30,6 @@ try:
     PIL_AVAILABLE = True
 except ImportError:
     PIL_AVAILABLE = False
-
-def log_debug(msg):
-    """生产环境禁用日志，避免性能损耗"""
-    pass
 
 def get_system_language():
     try:
@@ -241,10 +236,13 @@ def get_exe_dir():
 
 exe_dir = get_exe_dir()
 
-# 6 核心区域：美国、韩国(Seoul)、日本(Tokyo)、新加坡、德国、瑞典
 REGION_TO_FLAG = {
-    "us-west-2": "us", "ap-northeast-2": "jp", "ap-northeast-1": "jj",
-    "ap-southeast-1": "si", "eu-central-1": "ge", "eu-north-1": "sw"
+    "us-west-2": "us",
+    "ap-northeast-2": "jp",
+    "ap-northeast-1": "jj",
+    "ap-southeast-1": "si",
+    "eu-central-1": "ge",
+    "eu-north-1": "sw"
 }
 FLAG_TO_REGION = {v: k for k, v in REGION_TO_FLAG.items()}
 REGIONS = [
@@ -260,7 +258,7 @@ class RegionSelector(tk.Toplevel):
         self.uuid = uuid
         self.selected_flag = None
         self.switching = False
-        self.max_progress = 0  
+        self.max_progress = 0
         
         self.title(get_message("select_region"))
         self.geometry("480x360")
@@ -268,6 +266,7 @@ class RegionSelector(tk.Toplevel):
         self.resizable(False, False)
         self.transient(parent)
         self.grab_set()
+        self.protocol("WM_DELETE_WINDOW", self.close_window)
 
         main_frame = tk.Frame(self)
         main_frame.pack(fill=tk.BOTH, expand=True, padx=20, pady=20)
@@ -282,10 +281,9 @@ class RegionSelector(tk.Toplevel):
         self.current_label.config(text=txt)
 
         self.create_flag_grid(main_frame)
-        tk.Button(main_frame, text=get_text("close_button"), command=self.close_window).pack(pady=10)
     
     def force_ui_refresh(self):
-        self.update_idletasks()  
+        self.update_idletasks()
         self.update()
         if sys.platform == 'win32':
             self.after(1, lambda: self.update())
@@ -307,7 +305,7 @@ class RegionSelector(tk.Toplevel):
                     pil_image = Image.open(flag_path).resize((40, 30), Image.Resampling.LANCZOS)
                     flag_image = ImageTk.PhotoImage(pil_image)
                     flag_label = tk.Label(btn_frame, image=flag_image, cursor="hand2")
-                    flag_label.image = flag_image  
+                    flag_label.image = flag_image
                     flag_label.pack(pady=2)
                 else:
                     flag_label = tk.Label(btn_frame, text=flag_code.upper(), font=("Arial", 12, "bold"), cursor="hand2")
@@ -342,6 +340,7 @@ class RegionSelector(tk.Toplevel):
         is_manual_switching = True
         
         self.switching = True
+        self.protocol("WM_DELETE_WINDOW", lambda: None)
         self.was_vpn_on = (proxy_state == 1)
 
         if self.was_vpn_on:
@@ -409,8 +408,8 @@ class RegionSelector(tk.Toplevel):
 
     def _poll_switch_status(self, flag_code):
         self.poll_attempts = 0
-        self.max_poll_attempts = 120  
-        self.poll_interval = 5000  
+        self.max_poll_attempts = 120
+        self.poll_interval = 5000
         self.target_flag_code = flag_code
         self._do_poll_attempt()
         return True
@@ -426,19 +425,16 @@ class RegionSelector(tk.Toplevel):
                 data = response.json()
                 current_zone = data.get("zone", "")
                 vmname = data.get("vmname", "")
-                v2rayurl = data.get("v2rayurl", "")
 
                 if current_zone and current_zone in REGION_TO_FLAG:
                     self._update_main_window_region(REGION_TO_FLAG[current_zone], current_zone)
 
-                target_zone = FLAG_TO_REGION.get(self.target_flag_code, self.target_flag_code)
-
-                if current_zone == target_zone and v2rayurl:
-                    self._handle_poll_success(v2rayurl)
+                if current_zone == self.target_flag_code and data.get("v2rayurl"):
+                    self._handle_poll_success(data.get("v2rayurl"))
                     return
                 
-                if not vmname and v2rayurl and self.target_flag_code != 'us':
-                    self._handle_poll_success(v2rayurl)
+                if not vmname and data.get("v2rayurl") and self.target_flag_code != 'us':
+                    self._handle_poll_success(data.get("v2rayurl"))
                     return
                 
                 if vmname and self.target_flag_code in vmname:
@@ -459,14 +455,16 @@ class RegionSelector(tk.Toplevel):
                             if prog > self.max_progress:
                                 self.max_progress = prog
                                 self._update_progress_display(f"{get_message('processing')}{self.max_progress}%")
-                    except: pass
+                    except Exception:
+                        pass
 
                 if self.poll_attempts % 10 == 0:
                     est_prog = min(10 + self.poll_attempts, 90)
                     if est_prog > self.max_progress:
                         self.max_progress = est_prog
                         self._update_progress_display(f"{get_message('processing')}{self.max_progress}%")
-        except: pass
+        except Exception:
+            pass
 
         self.poll_attempts += 1
         if self.poll_attempts < self.max_poll_attempts:
@@ -475,7 +473,6 @@ class RegionSelector(tk.Toplevel):
             self._on_switch_failed("Timeout")
     
     def _handle_poll_success(self, v2rayurl):
-        """统一处理轮询成功逻辑"""
         parse_and_write_config(v2rayurl)
         self.max_progress = 100
         self._update_progress_display(get_message("switch_success"))
@@ -519,6 +516,8 @@ class RegionSelector(tk.Toplevel):
     def _on_switch_success(self, flag_code):
         global current_region, proxy_state, btn_general_proxy, btn_close_proxy, is_manual_switching
         
+        self.protocol("WM_DELETE_WINDOW", self.close_window)
+        
         current_region = flag_code
         self.current_zone = flag_code
         self._update_progress_display(get_message("switch_success"))
@@ -539,6 +538,7 @@ class RegionSelector(tk.Toplevel):
     
     def _on_switch_failed(self, error_msg):
         global is_manual_switching
+        self.protocol("WM_DELETE_WINDOW", self.close_window)
         self.title_label.config(text=get_message("select_region"), fg="black")
         for btn in self.flag_buttons.values():
             for child in btn.winfo_children():
@@ -786,17 +786,15 @@ def perform_silent_recovery(v2rayurl, zone):
         except: pass
 
 def connection_watchdog_thread(uuid):
-    """后台监控线程"""
     global proxy_state, window, is_manual_switching
     
     fail_count = 0
-    check_interval = 15 
+    check_interval = 15
     no_proxy = {"http": None, "https": None}
     
     while True:
         time.sleep(check_interval)
 
-        # [关键修复] 如果用户正在手动换区，跳过检测
         if is_manual_switching:
             continue
 
@@ -805,9 +803,7 @@ def connection_watchdog_thread(uuid):
                 fail_count += 1
                 if fail_count >= 2:
                     if check_local_network():
-                        # 本地有网，代理不通 -> 尝试静默自愈
                         try:
-                            # 强制直连获取配置
                             resp = requests.post("https://vvv.xiexievpn.com/getuserinfo", 
                                                json={"code": uuid}, 
                                                proxies=no_proxy, 
@@ -820,12 +816,10 @@ def connection_watchdog_thread(uuid):
                                     if window:
                                         window.after(0, lambda: perform_silent_recovery(new_url, new_zone))
                                     fail_count = 0
-                                    time.sleep(15) 
+                                    time.sleep(15)
                         except: pass
             else:
                 fail_count = 0
-
-# ================= 主窗口启动 =================
 
 def show_main_window(uuid):
     global window, btn_general_proxy, btn_close_proxy, chk_autostart, current_uuid, region_label
@@ -842,7 +836,6 @@ def show_main_window(uuid):
     if not config_ready and not os.path.exists(resource_path("config.json")):
         btn_general_proxy.config(state="disabled")
     
-    # 初始状态下关闭按钮通常禁用
     btn_close_proxy.config(state="disabled")
     
     btn_general_proxy.pack(pady=10)
@@ -869,7 +862,6 @@ def show_main_window(uuid):
         
     window.after(3000, check_update_async)
 
-    # 启动修复后的监控线程
     monitor_thread = threading.Thread(target=connection_watchdog_thread, args=(uuid,), daemon=True)
     monitor_thread.start()
     
@@ -878,12 +870,12 @@ def show_main_window(uuid):
             if int(sys.argv[1]) == 1:
                 global pending_autostart
                 if config_ready: set_general_proxy()
-                else: pending_autostart = True  
+                else: pending_autostart = True
         except: pass
 
     window.deiconify()
     window.attributes('-topmost', True)
-    window.attributes('-topmost', False)     
+    window.attributes('-topmost', False)
     window.mainloop()
 
 login_window = tk.Tk()
