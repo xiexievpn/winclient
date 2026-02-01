@@ -282,7 +282,7 @@ class RegionSelector(tk.Toplevel):
         self.current_label.config(text=txt)
 
         self.create_flag_grid(main_frame)
-        tk.Button(main_frame, text=get_message("close_button") or "Close", command=self.close_window).pack(pady=10)
+        tk.Button(main_frame, text=get_text("close_button"), command=self.close_window).pack(pady=10)
     
     def force_ui_refresh(self):
         self.update_idletasks()  
