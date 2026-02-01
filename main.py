@@ -16,7 +16,7 @@ import tempfile
 import shutil
 from datetime import datetime
 
-CURRENT_VERSION = "1.0.8"
+CURRENT_VERSION = "1.0.9"
 
 proxy_state = 0            
 is_manual_switching = False
@@ -241,18 +241,15 @@ def get_exe_dir():
 
 exe_dir = get_exe_dir()
 
+# 6 核心区域：美国、韩国(Seoul)、日本(Tokyo)、新加坡、德国、瑞典
 REGION_TO_FLAG = {
     "us-west-2": "us", "ap-northeast-2": "jp", "ap-northeast-1": "jj",
-    "ap-southeast-1": "si", "ap-southeast-2": "au", "ap-south-1": "in",
-    "ca-central-1": "ca", "eu-central-1": "ge", "eu-west-1": "ir",
-    "eu-west-2": "ki", "eu-west-3": "fr", "eu-north-1": "sw"
+    "ap-southeast-1": "si", "eu-central-1": "ge", "eu-north-1": "sw"
 }
 FLAG_TO_REGION = {v: k for k, v in REGION_TO_FLAG.items()}
 REGIONS = [
     ("jp", "ap-northeast-2"), ("us", "us-west-2"), ("jj", "ap-northeast-1"),
-    ("in", "ap-south-1"), ("si", "ap-southeast-1"), ("au", "ap-southeast-2"),
-    ("ca", "ca-central-1"), ("ge", "eu-central-1"), ("ir", "eu-west-1"),
-    ("ki", "eu-west-2"), ("fr", "eu-west-3"), ("sw", "eu-north-1")
+    ("si", "ap-southeast-1"), ("ge", "eu-central-1"), ("sw", "eu-north-1")
 ]
 
 class RegionSelector(tk.Toplevel):
