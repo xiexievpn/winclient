@@ -434,10 +434,11 @@ class RegionSelector(tk.Toplevel):
                 target_zone = FLAG_TO_REGION.get(self.target_flag_code, self.target_flag_code)
 
                 if current_zone == target_zone and v2rayurl:
-                    parse_and_write_config(v2rayurl)
-                    self.max_progress = 100  
-                    self._update_progress_display(get_message("switch_success"))
-                    self.after(1000, lambda: self._on_switch_success(self.target_flag_code))
+                    self._handle_poll_success(v2rayurl)
+                    return
+                
+                if not vmname and v2rayurl and self.target_flag_code != 'us':
+                    self._handle_poll_success(v2rayurl)
                     return
                 
                 if vmname and self.target_flag_code in vmname:
@@ -448,6 +449,13 @@ class RegionSelector(tk.Toplevel):
                                              timeout=5)
                         if p_resp.status_code == 200:
                             prog = p_resp.json().get("progress", 0)
+                            
+                            if prog >= 100:
+                                self.max_progress = 100
+                                self._update_progress_display(get_message("switch_success"))
+                                self.after(1500, lambda: self._on_switch_success(self.target_flag_code))
+                                return
+                            
                             if prog > self.max_progress:
                                 self.max_progress = prog
                                 self._update_progress_display(f"{get_message('processing')}{self.max_progress}%")
@@ -465,6 +473,13 @@ class RegionSelector(tk.Toplevel):
             self.after(self.poll_interval, self._do_poll_attempt)
         else:
             self._on_switch_failed("Timeout")
+    
+    def _handle_poll_success(self, v2rayurl):
+        """统一处理轮询成功逻辑"""
+        parse_and_write_config(v2rayurl)
+        self.max_progress = 100
+        self._update_progress_display(get_message("switch_success"))
+        self.after(1000, lambda: self._on_switch_success(self.target_flag_code))
     
     def _update_progress_display(self, text):
         try:
