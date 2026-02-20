@@ -13,6 +13,8 @@
     "copy": "复制",
     "paste": "粘贴",
     "select_all": "全选",
+    "protocol_label": "协议",
+    "protocol_auto": "自动选择",
     "region_url": "https://xiexievpn.com/cn/app.html",
     "messages": {
       "already_running": "程序已经在运行中，请勿重复启动！",
@@ -55,7 +57,10 @@
       "optional_update_msg": "发现新版本，是否立即更新？",
       "updating": "正在更新...",
       "download_failed": "下载失败",
-      "version_label": "版本"
+      "version_label": "版本",
+      "speed_testing": "正在测速选线...",
+      "speed_test_failed": "测速失败",
+      "degrading": "网络阻断，正在智能降级..."
     }
   },
   "en": {
@@ -72,6 +77,8 @@
     "copy": "copy",
     "paste": "paste",
     "select_all": "select all",
+    "protocol_label": "Protocol",
+    "protocol_auto": "Auto",
     "region_url": "https://xiexievpn.com/en/app.html",
     "messages": {
       "already_running": "The program is already running, please do not start it again!",
@@ -114,7 +121,10 @@
       "optional_update_msg": "A new version is available. Update now?",
       "updating": "Updating...",
       "download_failed": "Download failed",
-      "version_label": "Version"
+      "version_label": "Version",
+      "speed_testing": "Speed testing...",
+      "speed_test_failed": "Speed test failed",
+      "degrading": "Network blocked, smart fallback..."
     }
   }
 }
