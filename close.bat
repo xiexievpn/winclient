@@ -19,6 +19,7 @@ if '%errorlevel%' NEQ '0' (
     pushd "%CD%"
     CD /D "%~dp0"
 :: BatchGotAdmin (Run as Admin code ends)
-taskkill /IM xray.exe /F
+taskkill /IM xray.exe /F 2>nul
+taskkill /IM hysteria.exe /F 2>nul
 powershell -Command "Set-ItemProperty -Path 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Internet Settings' -Name ProxyEnable -Value 0"
 exit /B
