@@ -18,8 +18,8 @@ import base64
 import socket
 import concurrent.futures
 import random
-import socks                   # pysocks：HY2 测速 SOCKS5 代理依赖
-import urllib3.contrib.socks    # requests SOCKS 代理底层支持
+import socks                
+import urllib3.contrib.socks
 
 CURRENT_VERSION = "2.0.0"
 SUB_DOMAIN = "sub.xiexievpn.com"
@@ -33,11 +33,9 @@ current_protocol = None
 window = None
 config_ready = False
 protocol_label = None
-
-# UDP 阻断惩罚降级机制状态
 penalized_protocol = None
 penalty_until = 0
-current_node_url = None  # 防死循环：记录当前运行的节点 URL
+current_node_url = None
 
 try:
     from PIL import Image, ImageTk
@@ -79,7 +77,6 @@ def load_language():
             "messages": {}
         }
 
-    # 确保新增的协议相关文本存在（兼容未更新的 languages.json）
     if "protocol_label" not in lang_data:
         lang_data["protocol_label"] = "Protocol"
     if "protocol_auto" not in lang_data:
@@ -127,8 +124,6 @@ try:
         sys.exit(0)
 except Exception:
     pass
-
-# ==================== 更新检查 ====================
 
 def compare_versions(version1, version2):
     try:
@@ -234,8 +229,6 @@ def show_update_dialog(update_info):
         if messagebox.askyesno(get_message("update_available"), f"{get_message('optional_update_msg')}\n\n{version}\n\n{notes}"):
             download_and_replace()
 
-# ==================== 持久化存储 ====================
-
 def get_persistent_path(filename):
     if platform.system() == "Windows":
         appdata = os.getenv('APPDATA')
@@ -282,10 +275,7 @@ def remove_uuid_file():
     if os.path.exists(path_):
         os.remove(path_)
 
-# ==================== 核心：多协议测速与配置生成引擎 ====================
-
 def test_tcp_ping(host, port):
-    """对目标 host:port 发起 TCP 握手测延迟（ms）"""
     try:
         st = time.time()
         with socket.create_connection((host, int(port)), timeout=3):
@@ -294,7 +284,6 @@ def test_tcp_ping(host, port):
         return float('inf')
 
 def test_hy2_url_test(node):
-    """启动临时 Hysteria 进程，通过 SOCKS5 代理做 URL Test 测真实延迟"""
     temp_port = random.randint(30000, 39999)
     config = f"""server: {node['host']}:{node['port']}
 auth: {node.get('uuid', '')}
@@ -343,10 +332,8 @@ socks5:
             pass
 
 def speed_test_nodes(links_text):
-    """解析链接文本，并行 TCP Ping 测速，返回最优节点"""
     nodes = []
     
-    # 兼容 Base64 编码的订阅内容
     if "://" not in links_text:
         try:
             pad = len(links_text) % 4
@@ -367,7 +354,6 @@ def speed_test_nodes(links_text):
                 host = host_parts[0]
                 port = int(host_parts[1]) if len(host_parts) > 1 else 443
                 node_info = {"protocol": protocol, "url": line, "host": host, "port": port}
-                # HY2 节点：额外解析 uuid 和 sni 供 URL Test 临时配置使用
                 if protocol == "hy2":
                     node_info["uuid"] = main_part.split("@")[0]
                     query_part = main_part.split("?")[1].split("#")[0] if "?" in main_part else ""
@@ -381,12 +367,10 @@ def speed_test_nodes(links_text):
 
     def test_node(node):
         if node["protocol"] == "hy2":
-            node["ping"] = test_hy2_url_test(node)  # HY2 用真代理 URL Test
+            node["ping"] = test_hy2_url_test(node)
         else:
             tcp_ping = test_tcp_ping(node["host"], node["port"])
-            # 补偿：TCP 是 1 个 RTT，完整 HTTPS 代理请求约需 3 个 RTT + 100ms 处理损耗
             node["ping"] = tcp_ping * 3 + 100 if tcp_ping != float('inf') else float('inf')
-        # UDP 阻断惩罚：如果协议被 Watchdog 判定过阻断，人为增加 5000ms 延迟迫使其降级
         if penalized_protocol == node["protocol"] and time.time() < penalty_until:
             if node["ping"] != float('inf'):
                 node["ping"] += 5000
@@ -397,14 +381,12 @@ def speed_test_nodes(links_text):
         
     valid = [r for r in results if r["ping"] != float('inf')]
     if not valid:
-        # 兜底：如果 TCP 全面阻断，盲选第一个节点
         nodes[0]["ping"] = float('inf')
         return nodes[0]
         
     valid.sort(key=lambda x: x["ping"])
     best = valid[0]
     
-    # 策略优选：HY2 抗拥塞极强，若 VLESS 和 HY2 延迟差在 50ms 内，优先选 HY2
     for n in valid:
         if n["protocol"] == "hy2" and n["ping"] - best["ping"] <= 50:
             best = n
@@ -412,7 +394,6 @@ def speed_test_nodes(links_text):
     return best
 
 def write_vless_config(url_string):
-    """解析 vless:// URL 并生成 xray config.json"""
     try:
         if not url_string.startswith("vless://"):
             return False
@@ -451,7 +432,6 @@ def write_vless_config(url_string):
         return False
 
 def write_hy2_config(url_string):
-    """解析 hysteria2:// URL 并生成 hy2_config.yaml（纯 f-string，无需 PyYAML）"""
     try:
         main_part = url_string.split("://")[1]
         uuid = main_part.split("@")[0]
@@ -476,7 +456,6 @@ http:
         return False
 
 def parse_and_write_config_async(links_text, callback=None):
-    """异步测速 + 写入最优节点配置（线程安全，所有 UI 操作通过 window.after）"""
     global current_protocol, config_ready, pending_autostart
     
     if 'protocol_label' in globals() and protocol_label and window:
@@ -492,7 +471,6 @@ def parse_and_write_config_async(links_text, callback=None):
                 window.after(0, lambda: callback(False))
             return
 
-        # 防死循环：如果最优节点和当前运行的一模一样，不重复暴力重启内核
         if best_node["url"] == current_node_url and config_ready:
             if callback and window:
                 window.after(0, lambda: callback(True))
@@ -506,14 +484,13 @@ def parse_and_write_config_async(links_text, callback=None):
         if success:
             current_protocol = best_node["protocol"]
             config_ready = True
-            current_node_url = best_node["url"]  # 记录当前节点
+            current_node_url = best_node["url"]
             
             def update_ui():
                 global pending_autostart
                 if 'protocol_label' in globals() and protocol_label:
                     p_text = "VLESS ⚡" if current_protocol == "vless" else "HY2 🚀"
                     ping_text = f"{int(best_node['ping'])}ms" if best_node['ping'] != float('inf') else "Blind"
-                    # 显示降级状态
                     if penalized_protocol and time.time() < penalty_until and current_protocol != penalized_protocol:
                         p_text += " (↓ fallback)"
                     protocol_label.config(text=f"{get_text('protocol_label')}: {p_text} ({ping_text})", fg="green")
@@ -522,12 +499,10 @@ def parse_and_write_config_async(links_text, callback=None):
                     pending_autostart = False
                     set_general_proxy(show_success_msg=False)
                 elif proxy_state == 1:
-                    # 代理开启状态下静默重载进程
                     subprocess.run(["cmd", "/c", resource_path("close.bat")], capture_output=True, creationflags=subprocess.CREATE_NO_WINDOW)
-                    time.sleep(0.5)  # 等待端口释放
+                    time.sleep(0.5)
                     bat_file = "hy2_internet.bat" if current_protocol == 'hy2' else "internet.bat"
                     subprocess.run(["cmd", "/c", resource_path(bat_file)], capture_output=True, creationflags=subprocess.CREATE_NO_WINDOW)
-                    # close.bat 会关掉系统代理，重启后必须广播通知浏览器
                     try:
                         refresh_windows_proxy()
                     except:
@@ -547,7 +522,6 @@ def parse_and_write_config_async(links_text, callback=None):
     threading.Thread(target=task, daemon=True).start()
 
 def fetch_subscription(uuid):
-    """双通道配置拉取：优先 Worker 订阅，回退 /getuserinfo"""
     global current_region
     no_proxy = {"http": None, "https": None}
     
@@ -555,7 +529,6 @@ def fetch_subscription(uuid):
         global current_region
         links_text = ""
         
-        # 通道 1：Cloudflare Worker 订阅
         try:
             resp = requests.get(f"https://{SUB_DOMAIN}/sub/{uuid}?t={int(time.time())}", timeout=5, proxies=no_proxy)
             if resp.status_code == 200:
@@ -563,7 +536,6 @@ def fetch_subscription(uuid):
         except:
             pass
         
-        # 通道 2：原生 /getuserinfo 兜底
         try:
             response = requests.post("https://vvv.xiexievpn.com/getuserinfo",
                                      json={"code": uuid}, proxies=no_proxy, timeout=10)
@@ -580,7 +552,6 @@ def fetch_subscription(uuid):
                 if not links_text and v2rayurl:
                     links_text = v2rayurl
                 
-                # 新用户：无配置也无区域，需先 adduser
                 if not v2rayurl and not zone:
                     try:
                         requests.post("https://vvv.xiexievpn.com/adduser",
@@ -591,7 +562,6 @@ def fetch_subscription(uuid):
                         window.after(3000, lambda: fetch_subscription(uuid))
                     return
                 
-                # 有区域但无链接：等待 VM 创建完成
                 if not v2rayurl and zone:
                     if window:
                         window.after(3000, lambda: fetch_subscription(uuid))
@@ -603,8 +573,6 @@ def fetch_subscription(uuid):
             parse_and_write_config_async(links_text)
             
     threading.Thread(target=task, daemon=True).start()
-
-# ==================== 区域映射 ====================
 
 REGION_TO_FLAG = {
     "us-west-2": "us",
@@ -619,8 +587,6 @@ REGIONS = [
     ("jp", "ap-northeast-2"), ("us", "us-west-2"), ("jj", "ap-northeast-1"),
     ("si", "ap-southeast-1"), ("ge", "eu-central-1"), ("sw", "eu-north-1")
 ]
-
-# ==================== 区域选择器（完整恢复轮询逻辑）====================
 
 class RegionSelector(tk.Toplevel):
     def __init__(self, parent, current_zone, uuid):
@@ -762,7 +728,6 @@ class RegionSelector(tk.Toplevel):
                     self._wait_for_config_update()
                     return
                 elif response.status_code in [202, 504]:
-                    # 恢复完整轮询逻辑：后台线程阻塞轮询，不阻塞 UI
                     if self._poll_switch_status(flag_code):
                         return
                     if attempt < max_retries - 1:
@@ -787,7 +752,6 @@ class RegionSelector(tk.Toplevel):
                     return
 
     def _poll_switch_status(self, flag_code):
-        """在后台线程中阻塞轮询 VM 创建进度"""
         no_proxy = {"http": None, "https": None}
         self.max_progress = 0
         
@@ -807,17 +771,14 @@ class RegionSelector(tk.Toplevel):
                     if current_zone and current_zone in REGION_TO_FLAG:
                         self.after(0, lambda z=current_zone: self._update_main_window_region(REGION_TO_FLAG.get(z, z), z))
 
-                    # 区域切换完毕且有链接
                     if current_zone == self.target_flag_code and data.get("v2rayurl"):
                         self.after(0, lambda url=data.get("v2rayurl"): self._handle_poll_success(url))
                         return True
                     
-                    # 非 us 区域的备用判断
                     if not vmname and data.get("v2rayurl") and self.target_flag_code != 'us':
                         self.after(0, lambda url=data.get("v2rayurl"): self._handle_poll_success(url))
                         return True
                     
-                    # VM 创建进度跟踪
                     if vmname and self.target_flag_code in vmname:
                         try:
                             p_resp = requests.post("https://vvv.xiexievpn.com/createvmloading",
@@ -830,7 +791,6 @@ class RegionSelector(tk.Toplevel):
                                 if prog >= 100:
                                     self.max_progress = 100
                                     self.after(0, lambda: self._update_progress_display(get_message("switch_success")))
-                                    # 进度完成，等待下一轮拿到 v2rayurl
                                     time.sleep(3)
                                     continue
                                 
@@ -840,7 +800,6 @@ class RegionSelector(tk.Toplevel):
                         except Exception:
                             pass
 
-                    # 估算进度
                     if attempt % 10 == 0:
                         est_prog = min(10 + attempt, 90)
                         if est_prog > self.max_progress:
@@ -855,12 +814,10 @@ class RegionSelector(tk.Toplevel):
         return False
     
     def _handle_poll_success(self, v2rayurl):
-        """轮询成功后触发异步测速+写入配置"""
         self._update_progress_display(get_message("speed_testing"))
         parse_and_write_config_async(v2rayurl, callback=self._on_config_ready)
 
     def _on_config_ready(self, success):
-        """异步配置写入完成的回调"""
         if success:
             self.max_progress = 100
             self._update_progress_display(get_message("switch_success"))
@@ -920,7 +877,7 @@ class RegionSelector(tk.Toplevel):
         if hasattr(self, 'was_vpn_on') and self.was_vpn_on:
             try:
                 subprocess.run(["cmd", "/c", resource_path("close.bat")], capture_output=True, creationflags=subprocess.CREATE_NO_WINDOW)
-                time.sleep(0.5)  # 等待端口释放
+                time.sleep(0.5)
                 bat_file = "hy2_internet.bat" if current_protocol == 'hy2' else "internet.bat"
                 subprocess.run(["cmd", "/c", resource_path(bat_file)], capture_output=True, creationflags=subprocess.CREATE_NO_WINDOW)
                 proxy_state = 1
@@ -931,13 +888,11 @@ class RegionSelector(tk.Toplevel):
             except:
                 pass
         
-        # 切区成功后重置惩罚，防止上一区的降级惩罚被无辜继承到新区
         penalized_protocol = None
         is_manual_switching = False
         self.after(2000, self.close_window)
     
     def _on_switch_failed(self, error_msg):
-        """切换失败：恢复按钮状态，保持窗口打开允许重试"""
         global is_manual_switching
         self.protocol("WM_DELETE_WINDOW", self.close_window)
         self.title_label.config(text=get_message("select_region"), fg="black")
@@ -967,8 +922,6 @@ def update_region_display():
     except:
         pass
 
-# ==================== 代理操控 ====================
-
 def toggle_autostart():
     try:
         save_autostart_state(chk_autostart.get())
@@ -986,7 +939,6 @@ def on_chk_change(*args):
     toggle_autostart()
 
 def refresh_windows_proxy():
-    """通过 Windows API 广播代理设置变更，浏览器无需重启即可生效"""
     try:
         INTERNET_OPTION_SETTINGS_CHANGED = 39
         INTERNET_OPTION_REFRESH = 37
@@ -1003,12 +955,11 @@ def set_general_proxy(show_success_msg=True):
         return
     try:
         subprocess.run(["cmd", "/c", resource_path("close.bat")], capture_output=True, creationflags=subprocess.CREATE_NO_WINDOW)
-        time.sleep(0.5)  # 等待端口释放，防止 Address already in use
+        time.sleep(0.5)
         
-        # 根据协议智能选择启动脚本
         bat_file = "hy2_internet.bat" if current_protocol == 'hy2' else "internet.bat"
         subprocess.run(["cmd", "/c", resource_path(bat_file)], capture_output=True, creationflags=subprocess.CREATE_NO_WINDOW)
-        refresh_windows_proxy()  # 广播代理变更，浏览器即时生效
+        refresh_windows_proxy()
         
         if show_success_msg:
             messagebox.showinfo("Information", get_message("vpn_setup_success"))
@@ -1023,7 +974,7 @@ def close_proxy():
     global proxy_state
     try:
         subprocess.run(["cmd", "/c", resource_path("close.bat")], capture_output=True, creationflags=subprocess.CREATE_NO_WINDOW)
-        refresh_windows_proxy()  # 广播代理变更，浏览器即时生效
+        refresh_windows_proxy()
         messagebox.showinfo("Information", get_message("vpn_closed"))
         btn_close_proxy.config(state="disabled")
         btn_general_proxy.config(state="normal")
@@ -1040,8 +991,6 @@ def on_closing():
         except:
             pass
     window.destroy()
-
-# ==================== 连接监控看门狗 ====================
 
 def check_proxy_connectivity():
     proxies = {'http': 'http://127.0.0.1:1080', 'https': 'http://127.0.0.1:1080'}
@@ -1060,7 +1009,6 @@ def check_local_network():
         return False
 
 def connection_watchdog_thread(uuid):
-    """带协议惩罚降级的连接看门狗（极速复查版）"""
     global proxy_state, window, is_manual_switching, current_protocol
     global penalized_protocol, penalty_until
     
@@ -1072,23 +1020,19 @@ def connection_watchdog_thread(uuid):
 
         if proxy_state == 1:
             if not check_proxy_connectivity():
-                # 不再死等15秒累计 fail_count，立即 1.5 秒快速复查
                 time.sleep(1.5)
                 if not check_proxy_connectivity():
                     if check_local_network():
-                        # 触发协议惩罚降级：给当前失败的协议施加 5 分钟的 5000ms 延迟惩罚
                         penalized_protocol = current_protocol
-                        penalty_until = time.time() + 300  # 5分钟
+                        penalty_until = time.time() + 300
                         
                         if 'protocol_label' in globals() and protocol_label and window:
                             window.after(0, lambda: protocol_label.config(
                                 text=get_message("degrading"), fg="red"))
                         
-                        # 重拉订阅并测速，惩罚机制会自动避开被判阻断的协议
                         fetch_subscription(uuid)
-                        time.sleep(15)  # 正在降级换线，暂停监控 15 秒
+                        time.sleep(15)
 
-# ==================== 主窗口 ====================
 
 def show_main_window(uuid):
     global window, btn_general_proxy, btn_close_proxy, chk_autostart, current_uuid, region_label, protocol_label
@@ -1119,15 +1063,12 @@ def show_main_window(uuid):
     region_label = tk.Label(window, text="", font=("Arial", 9), fg="gray")
     region_label.pack(pady=2)
     
-    # 协议状态显示
     protocol_label = tk.Label(window, text=f"{get_text('protocol_label')}: {get_text('protocol_auto')}", font=("Arial", 9, "bold"), fg="gray")
     protocol_label.pack(pady=2)
 
-    # 使用双通道拉取配置
     fetch_subscription(uuid)
     window.after(1000, update_region_display)
 
-    # 线程安全的更新检查
     def check_update_async():
         def update_check():
             update_info = check_for_updates()
@@ -1156,7 +1097,6 @@ def show_main_window(uuid):
     window.attributes('-topmost', False)
     window.mainloop()
 
-# ==================== 登录窗口 ====================
 
 def on_remember_changed(*args):
     if not chk_remember.get():
@@ -1174,7 +1114,6 @@ def check_login():
             show_main_window(entered_uuid)
         else:
             remove_uuid_file()
-            # 细粒度错误码区分
             msg = get_message("invalid_code") if response.status_code == 401 else get_message("expired") if response.status_code == 403 else get_message("server_error")
             messagebox.showerror("Error", msg)
     except Exception as e:
@@ -1191,7 +1130,6 @@ entry_uuid = tk.Entry(login_window)
 entry_uuid.pack(pady=5)
 entry_uuid.bind("<Control-Key-a>", lambda event: entry_uuid.select_range(0, tk.END))
 
-# 右键菜单：复制、粘贴、全选
 menu = Menu(entry_uuid, tearoff=0)
 menu.add_command(label=get_text("copy"), command=lambda: login_window.clipboard_append(entry_uuid.selection_get()))
 menu.add_command(label=get_text("paste"), command=lambda: entry_uuid.insert(tk.INSERT, login_window.clipboard_get()))
