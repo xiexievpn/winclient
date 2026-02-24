@@ -21,7 +21,7 @@ import random
 import socks                
 import urllib3.contrib.socks
 
-CURRENT_VERSION = "2.0.0"
+CURRENT_VERSION = "3.0.0"
 SUB_DOMAIN = "sub.xiexievpn.com"
 
 proxy_state = 0
@@ -283,25 +283,80 @@ def test_tcp_ping(host, port):
     except Exception:
         return float('inf')
 
+def generate_singbox_config(proxy_outbound):
+    config_data = {
+        "log": {"level": "error"},
+        "dns": {
+            "servers": [
+                {"tag": "dns-remote", "address": "https://1.1.1.1/dns-query", "address_resolver": "dns-local", "detour": "proxy"},
+                {"tag": "dns-local", "address": "223.5.5.5", "detour": "direct"}
+            ],
+            "rules": [
+                {"outbound": "any", "server": "dns-local"},
+                {"rule_set": ["geosite-cn"], "server": "dns-local"}
+            ],
+            "final": "dns-remote",
+            "strategy": "ipv4_only"
+        },
+        "inbounds": [
+            {
+                "type": "tun",
+                "tag": "tun-in",
+                "interface_name": "xiexievpn",
+                "address": ["198.18.0.1/30"],
+                "auto_route": True,
+                "strict_route": True,
+                "stack": "mixed",
+                "sniff": True,
+                "sniff_override_destination": True
+            },
+            {"type": "mixed", "tag": "mixed-in", "listen": "127.0.0.1", "listen_port": 10808},
+            {"type": "mixed", "tag": "mixed-in2", "listen": "127.0.0.1", "listen_port": 1080}
+        ],
+        "outbounds": [
+            proxy_outbound,
+            {"type": "direct", "tag": "direct"},
+            {"type": "block", "tag": "block"},
+            {"type": "dns", "tag": "dns-out"}
+        ],
+        "route": {
+            "rule_set": [
+                {"tag": "geoip-cn", "type": "local", "format": "binary", "path": os.path.abspath(resource_path("geoip-cn.srs")).replace("\\", "/")},
+                {"tag": "geosite-cn", "type": "local", "format": "binary", "path": os.path.abspath(resource_path("geosite-cn.srs")).replace("\\", "/")}
+            ],
+            "rules": [
+                {"protocol": "dns", "outbound": "dns-out"},
+                {"port": 53, "outbound": "dns-out"},
+                {"protocol": "bittorrent", "outbound": "direct"},
+                {"ip_is_private": True, "outbound": "direct"},
+                {"rule_set": ["geoip-cn", "geosite-cn"], "outbound": "direct"}
+            ],
+            "auto_detect_interface": True,
+            "final": "proxy"
+        }
+    }
+    with open(resource_path("config.json"), "w", encoding="utf-8") as f:
+        json.dump(config_data, f, indent=4)
+    return True
+
 def test_hy2_url_test(node):
     temp_port = random.randint(30000, 39999)
-    config = f"""server: {node['host']}:{node['port']}
-auth: {node.get('uuid', '')}
-tls:
-  sni: {node.get('sni', node['host'])}
-  insecure: false
-socks5:
-  listen: 127.0.0.1:{temp_port}
-"""
-    config_path = os.path.join(tempfile.gettempdir(), f"hy2_test_{temp_port}.yaml")
+    config = {
+        "log": {"level": "fatal"},
+        "inbounds": [{"type": "mixed", "tag": "mixed-in", "listen": "127.0.0.1", "listen_port": temp_port}],
+        "outbounds": [{
+            "type": "hysteria2", "tag": "proxy", "server": node["host"], "server_port": node["port"],
+            "password": node.get("uuid", ""), "tls": {"enabled": True, "server_name": node.get("sni", node["host"]), "insecure": False}
+        }]
+    }
+    config_path = os.path.join(tempfile.gettempdir(), f"hy2_test_{temp_port}.json")
     with open(config_path, "w", encoding="utf-8") as f:
-        f.write(config)
+        json.dump(config, f)
 
     proc = None
     try:
-        hy2_exe = resource_path("hysteria.exe")
         proc = subprocess.Popen(
-            [hy2_exe, "client", "-c", config_path],
+            [resource_path("sing-box.exe"), "run", "-c", config_path],
             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
             creationflags=subprocess.CREATE_NO_WINDOW
         )
@@ -400,34 +455,27 @@ def write_vless_config(url_string):
         uuid = url_string.split("@")[0].split("://")[1]
         main_part = url_string.split("@")[1]
         domain_port_part = main_part.split("?")[0]
-        domain = domain_port_part.split(":")[0].split(".")[0]
-        query_part = url_string.split("?")[1].split("#")[0]
+        host = domain_port_part.split(":")[0]
+        port = int(domain_port_part.split(":")[1]) if ":" in domain_port_part else 443
+
+        domain = host.split(".")[0]
+        query_part = url_string.split("?")[1].split("#")[0] if "?" in main_part else ""
         params = urllib.parse.parse_qs(query_part)
+
+        sni = params.get('sni', [f"{domain}.rocketchats.xyz"])[0].replace("www.", "")
         public_key = params.get('pbk', [''])[0] or "mUzqKeHBc-s1m03iD8Dh1JoL2B9JwG5mMbimEoJ523o"
         short_id = params.get('sid', [''])[0]
-        sni = params.get('sni', [f"{domain}.rocketchats.xyz"])[0].replace("www.", "")
 
-        outbounds = [
-            {"protocol": "vless", "settings": {"vnext": [{"address": sni, "port": 443, "users": [{"id": uuid, "encryption": "none", "flow": "xtls-rprx-vision"}]}]}, "streamSettings": {"network": "tcp", "security": "reality", "realitySettings": {"show": False, "fingerprint": "chrome", "serverName": sni, "publicKey": public_key, "shortId": short_id, "spiderX": ""}}, "tag": "proxy"},
-            {"protocol": "freedom", "tag": "direct"},
-            {"protocol": "blackhole", "tag": "block"}
-        ]
-        routing_rules = [
-            {"type": "field", "domain": ["geosite:category-ads-all"], "outboundTag": "block"},
-            {"type": "field", "protocol": ["bittorrent"], "outboundTag": "direct"},
-            {"type": "field", "domain": ["geosite:geolocation-!cn"], "outboundTag": "proxy"},
-            {"type": "field", "ip": ["geoip:cn", "geoip:private"], "outboundTag": "direct"}
-        ]
-        config_data = {
-            "log": {"loglevel": "none", "error": ""},
-            "dns": {"servers": [{"tag": "bootstrap", "address": "223.5.5.5", "domains": [], "detour": "direct"}, {"tag": "remote-doh", "address": "https://1.1.1.1/dns-query", "detour": "proxy"}], "queryStrategy": "UseIPv4"},
-            "routing": {"domainStrategy": "IPIfNonMatch", "rules": routing_rules},
-            "inbounds": [{"listen": "127.0.0.1", "port": 10808, "protocol": "socks"}, {"listen": "127.0.0.1", "port": 1080, "protocol": "http"}],
-            "outbounds": outbounds
+        proxy_outbound = {
+            "type": "vless", "tag": "proxy", "server": host, "server_port": port, "uuid": uuid, "flow": "xtls-rprx-vision",
+            "tls": {
+                "enabled": True, "server_name": sni,
+                "utls": {"enabled": True, "fingerprint": "chrome"},
+                "reality": {"enabled": True, "public_key": public_key, "short_id": short_id}
+            },
+            "packet_encoding": "xudp"
         }
-        with open(resource_path("config.json"), "w", encoding="utf-8") as f:
-            json.dump(config_data, f, indent=4)
-        return True
+        return generate_singbox_config(proxy_outbound)
     except Exception:
         return False
 
@@ -436,22 +484,16 @@ def write_hy2_config(url_string):
         main_part = url_string.split("://")[1]
         uuid = main_part.split("@")[0]
         host_port = main_part.split("@")[1].split("?")[0].split("/")[0]
+        host = host_port.split(":")[0]
+        port = int(host_port.split(":")[1]) if ":" in host_port else 443
         query_part = main_part.split("?")[1].split("#")[0] if "?" in main_part else ""
-        sni = urllib.parse.parse_qs(query_part).get('sni', [host_port.split(':')[0]])[0]
+        sni = urllib.parse.parse_qs(query_part).get('sni', [host])[0]
 
-        yaml_str = f"""server: {host_port}
-auth: {uuid}
-tls:
-  sni: {sni}
-  insecure: false
-socks5:
-  listen: 127.0.0.1:10808
-http:
-  listen: 127.0.0.1:1080
-"""
-        with open(resource_path("hy2_config.yaml"), "w", encoding="utf-8") as f:
-            f.write(yaml_str)
-        return True
+        proxy_outbound = {
+            "type": "hysteria2", "tag": "proxy", "server": host, "server_port": port, "password": uuid,
+            "tls": {"enabled": True, "server_name": sni, "insecure": False}
+        }
+        return generate_singbox_config(proxy_outbound)
     except Exception:
         return False
 
@@ -501,12 +543,7 @@ def parse_and_write_config_async(links_text, callback=None):
                 elif proxy_state == 1:
                     subprocess.run(["cmd", "/c", resource_path("close.bat")], capture_output=True, creationflags=subprocess.CREATE_NO_WINDOW)
                     time.sleep(0.5)
-                    bat_file = "hy2_internet.bat" if current_protocol == 'hy2' else "internet.bat"
-                    subprocess.run(["cmd", "/c", resource_path(bat_file)], capture_output=True, creationflags=subprocess.CREATE_NO_WINDOW)
-                    try:
-                        refresh_windows_proxy()
-                    except:
-                        pass
+                    subprocess.run(["cmd", "/c", resource_path("internet.bat")], capture_output=True, creationflags=subprocess.CREATE_NO_WINDOW)
                 elif 'btn_general_proxy' in globals() and btn_general_proxy and proxy_state == 0:
                     btn_general_proxy.config(state="normal")
                 
@@ -688,8 +725,7 @@ class RegionSelector(tk.Toplevel):
             try:
                 subprocess.run(["cmd", "/c", resource_path("close.bat")], capture_output=True, check=True, creationflags=subprocess.CREATE_NO_WINDOW)
                 try:
-                    subprocess.run(["taskkill", "/f", "/im", "xray.exe"], capture_output=True, creationflags=subprocess.CREATE_NO_WINDOW)
-                    subprocess.run(["taskkill", "/f", "/im", "hysteria.exe"], capture_output=True, creationflags=subprocess.CREATE_NO_WINDOW)
+                    subprocess.run(["taskkill", "/f", "/im", "sing-box.exe"], capture_output=True, creationflags=subprocess.CREATE_NO_WINDOW)
                 except:
                     pass
             except Exception:
@@ -878,8 +914,7 @@ class RegionSelector(tk.Toplevel):
             try:
                 subprocess.run(["cmd", "/c", resource_path("close.bat")], capture_output=True, creationflags=subprocess.CREATE_NO_WINDOW)
                 time.sleep(0.5)
-                bat_file = "hy2_internet.bat" if current_protocol == 'hy2' else "internet.bat"
-                subprocess.run(["cmd", "/c", resource_path(bat_file)], capture_output=True, creationflags=subprocess.CREATE_NO_WINDOW)
+                subprocess.run(["cmd", "/c", resource_path("internet.bat")], capture_output=True, creationflags=subprocess.CREATE_NO_WINDOW)
                 proxy_state = 1
                 if 'btn_general_proxy' in globals() and btn_general_proxy:
                     btn_general_proxy.config(state="disabled")
@@ -938,28 +973,15 @@ def toggle_autostart():
 def on_chk_change(*args):
     toggle_autostart()
 
-def refresh_windows_proxy():
-    try:
-        INTERNET_OPTION_SETTINGS_CHANGED = 39
-        INTERNET_OPTION_REFRESH = 37
-        internet_set_option = ctypes.windll.wininet.InternetSetOptionW
-        internet_set_option(0, INTERNET_OPTION_SETTINGS_CHANGED, 0, 0)
-        internet_set_option(0, INTERNET_OPTION_REFRESH, 0, 0)
-    except Exception:
-        pass
-
 def set_general_proxy(show_success_msg=True):
     global proxy_state, config_ready, current_protocol
-    if not config_ready and not os.path.exists(resource_path("config.json")) and not os.path.exists(resource_path("hy2_config.yaml")):
+    if not config_ready and not os.path.exists(resource_path("config.json")):
         messagebox.showinfo(get_text("app_title"), get_message("config_preparing"))
         return
     try:
         subprocess.run(["cmd", "/c", resource_path("close.bat")], capture_output=True, creationflags=subprocess.CREATE_NO_WINDOW)
         time.sleep(0.5)
-        
-        bat_file = "hy2_internet.bat" if current_protocol == 'hy2' else "internet.bat"
-        subprocess.run(["cmd", "/c", resource_path(bat_file)], capture_output=True, creationflags=subprocess.CREATE_NO_WINDOW)
-        refresh_windows_proxy()
+        subprocess.run(["cmd", "/c", resource_path("internet.bat")], capture_output=True, creationflags=subprocess.CREATE_NO_WINDOW)
         
         if show_success_msg:
             messagebox.showinfo("Information", get_message("vpn_setup_success"))
@@ -974,7 +996,6 @@ def close_proxy():
     global proxy_state
     try:
         subprocess.run(["cmd", "/c", resource_path("close.bat")], capture_output=True, creationflags=subprocess.CREATE_NO_WINDOW)
-        refresh_windows_proxy()
         messagebox.showinfo("Information", get_message("vpn_closed"))
         btn_close_proxy.config(state="disabled")
         btn_general_proxy.config(state="normal")
@@ -1008,6 +1029,14 @@ def check_local_network():
     except:
         return False
 
+def is_singbox_running():
+    try:
+        result = subprocess.run(["tasklist", "/FI", "IMAGENAME eq sing-box.exe"],
+                               capture_output=True, text=True, creationflags=subprocess.CREATE_NO_WINDOW)
+        return "sing-box.exe" in result.stdout
+    except Exception:
+        return False
+
 def connection_watchdog_thread(uuid):
     global proxy_state, window, is_manual_switching, current_protocol
     global penalized_protocol, penalty_until
@@ -1022,7 +1051,7 @@ def connection_watchdog_thread(uuid):
             if not check_proxy_connectivity():
                 time.sleep(1.5)
                 if not check_proxy_connectivity():
-                    if check_local_network():
+                    if check_local_network() or not is_singbox_running():
                         penalized_protocol = current_protocol
                         penalty_until = time.time() + 300
                         
