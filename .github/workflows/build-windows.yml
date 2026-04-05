@@ -1,0 +1,51 @@
+name: Build Windows Client
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - '**/*.py'
+      - '**/*.bat'
+      - '**/*.json'
+      - '**/*.spec'
+      - 'flags/**'
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Dependencies
+        run: pip install -r requirements.txt
+
+      - name: Download sing-box and wintun
+        run: |
+          Invoke-WebRequest -Uri "https://github.com/SagerNet/sing-box/releases/download/v1.10.7/sing-box-1.10.7-windows-amd64.zip" -OutFile "sing-box.zip"
+          Expand-Archive -Path "sing-box.zip" -DestinationPath "." -Force
+          Copy-Item "sing-box-1.10.7-windows-amd64/sing-box.exe" "."
+          Invoke-WebRequest -Uri "https://www.wintun.net/builds/wintun-0.14.1.zip" -OutFile "wintun.zip"
+          Expand-Archive -Path "wintun.zip" -DestinationPath "." -Force
+          Copy-Item "wintun/bin/amd64/wintun.dll" "."
+          Invoke-WebRequest -Uri "https://raw.githubusercontent.com/SagerNet/sing-geoip/rule-set/geoip-cn.srs" -OutFile "geoip-cn.srs"
+          Invoke-WebRequest -Uri "https://raw.githubusercontent.com/SagerNet/sing-geosite/rule-set/geosite-cn.srs" -OutFile "geosite-cn.srs"
+
+      # 直接用 xiexievpn.spec 打包，不再重复写 --add-data 参数
+      # 修改打包配置时只需改 xiexievpn.spec 一个地方
+      - name: Build EXE
+        shell: cmd
+        run: pyinstaller xiexievpn.spec
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: xiexievpn-windows
+          path: dist/xiexievpn.exe
+          retention-days: 30
